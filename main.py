@@ -9,8 +9,8 @@ from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 # 🔐 Ganti token & API key Anda
 #TELEGRAM_TOKEN = "7466985733:AAEklNiGSFAKSk0rD5HKfH4Gw-i3iYbObYk"
 #API_KEY = "d963595ca57821e552144e6b333e51b5"
-TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
-API_KEY = os.environ.get("API_FOOTBALL_KEY")
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
+API_KEY = os.getenv("API_FOOTBALL_KEY")
 headers = {
     "x-apisports-key": API_KEY
 }
