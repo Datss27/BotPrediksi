@@ -2,9 +2,12 @@ import requests
 import pytz
 import time
 import os
+from dotenv import load_dotenv
 from datetime import datetime
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
+
+load_dotenv()
 
 # 🔐 Ganti token & API key Anda
 #TELEGRAM_TOKEN = "7466985733:AAEklNiGSFAKSk0rD5HKfH4Gw-i3iYbObYk"
