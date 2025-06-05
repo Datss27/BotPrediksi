@@ -1,24 +1,24 @@
+import os
+import time
 import requests
 import pytz
-import time
-import os
-from dotenv import load_dotenv
 from datetime import datetime
+from dotenv import load_dotenv
+
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 
+# ⬇️ Load .env untuk development lokal
 load_dotenv()
 
-# 🔐 Ganti token & API key Anda
-#TELEGRAM_TOKEN = "7466985733:AAEklNiGSFAKSk0rD5HKfH4Gw-i3iYbObYk"
-#API_KEY = "d963595ca57821e552144e6b333e51b5"
+# 🔐 Ambil token dan API key dari environment variable
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 API_KEY = os.getenv("API_FOOTBALL_KEY")
 headers = {
     "x-apisports-key": API_KEY
 }
 
-# 🔄 Ambil fixture hari ini dengan status NS
+# 🔄 Ambil semua fixture hari ini yang belum mulai (status: NS)
 def get_fixtures_today():
     today = datetime.now().strftime("%Y-%m-%d")
     url = "https://v3.football.api-sports.io/fixtures"
@@ -30,22 +30,18 @@ def get_fixtures_today():
     data = response.json()
     return data.get("response", [])
 
-# ✅ Ambil semua fixture_id tanpa filter timezone
-def get_all_fixture_ids(fixtures):
-    return [fixture["fixture"]["id"] for fixture in fixtures]
-
-# 📊 Ambil prediksi untuk 1 fixture
-def get_prediction(fixture_id):
+# 📊 Ambil prediksi berdasarkan 1 fixture lengkap (bukan hanya ID)
+def get_prediction(fixture):
     fixture_id = fixture["fixture"]["id"]
     home_team = fixture["teams"]["home"]["name"]
     away_team = fixture["teams"]["away"]["name"]
 
-    # Waktu lokal Asia/Jakarta
+    # Konversi waktu UTC ke Asia/Jakarta
     utc_time = datetime.strptime(fixture["fixture"]["date"], "%Y-%m-%dT%H:%M:%S%z")
     jakarta_time = utc_time.astimezone(pytz.timezone("Asia/Jakarta"))
     waktu_main = jakarta_time.strftime("%H:%M %d-%m-%Y")
 
-    # Ambil prediksi
+    # Ambil prediksi dari API
     url = "https://v3.football.api-sports.io/predictions"
     params = {"fixture": fixture_id}
     response = requests.get(url, headers=headers, params=params)
@@ -70,19 +66,21 @@ def get_prediction(fixture_id):
             f"🕒 *Kickoff:* `{waktu_main}` WIB\n"
             f"❌ Prediksi tidak tersedia."
         )
+
+# 🧠 Command /prediksi
 async def prediksi(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("🔄 Mengambil prediksi semua pertandingan hari ini...")
     fixtures = get_fixtures_today()
-    fixture_ids = get_all_fixture_ids(fixtures)
 
-    if not fixture_ids:
+    if not fixtures:
         await update.message.reply_text("❌ Tidak ada pertandingan hari ini.")
         return
 
-    for fid in fixture_ids:
-        prediksi = get_prediction(fid)
-        await update.message.reply_text(prediksi)
-        time.sleep(1.2)
+    for fixture in fixtures:
+        prediksi_text = get_prediction(fixture)
+        await update.message.reply_text(prediksi_text, parse_mode="Markdown")
+        time.sleep(1.2)  # Jeda agar tidak spam API
+
 # 🚀 Jalankan Bot
 if __name__ == "__main__":
     app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
