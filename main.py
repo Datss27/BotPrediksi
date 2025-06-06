@@ -7,6 +7,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, ContextTypes
 from dotenv import load_dotenv
 import pytz
+from openpyxl.styles import Font
 
 # Load environment variables (optional jika pakai Railway Env)
 load_dotenv()
@@ -55,6 +56,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     rows = []
     for fixture in response.get("response", []):
         league_id = fixture["league"]["id"]
+        league_name = fixture["league"]["name"]  # Tambahkan nama liga
         fixture_id = fixture["fixture"]["id"]
 
         if league_id not in LEAGUE_IDS:
@@ -80,6 +82,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         rows.append({
             "Tanggal": date_str,
+            "League": league_name,  # Masukkan nama liga di sini
             "Home": home,
             "Away": away,
             "Form Home": form_home,
@@ -96,8 +99,22 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     df = pd.DataFrame(rows)
+
     file_path = "/tmp/prediksi.xlsx"
-    df.to_excel(file_path, index=False)
+    with pd.ExcelWriter(file_path, engine="openpyxl") as writer:
+        df.to_excel(writer, index=False, sheet_name="Prediksi")
+
+        workbook = writer.book
+        worksheet = writer.sheets["Prediksi"]
+
+        emoji_font = Font(name="Segoe UI Emoji")
+
+        # Set font emoji untuk cell yang mengandung emoji prediksi form
+        for row in worksheet.iter_rows(min_row=2, max_row=worksheet.max_row,
+                                       min_col=1, max_col=worksheet.max_column):
+            for cell in row:
+                if isinstance(cell.value, str) and any(e in cell.value for e in ["✅", "❌", "🔘"]):
+                    cell.font = emoji_font
 
     await query.message.reply_document(document=open(file_path, "rb"), filename=f"prediksi_{date_str}.xlsx")
 
