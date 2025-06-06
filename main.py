@@ -1,89 +1,111 @@
+import logging
 import os
-import time
 import requests
-import pytz
-from datetime import datetime
+import pandas as pd
+from datetime import datetime, timedelta
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, ContextTypes
 from dotenv import load_dotenv
+import pytz
 
-from telegram import Update
-from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
-
-# ⬇️ Load .env untuk development lokal
+# Load environment variables (optional jika pakai Railway Env)
 load_dotenv()
 
-# 🔐 Ambil token dan API key dari environment variable
+# Logging untuk Railway log viewer
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO
+)
+
+# Token dan API Key dari ENV
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 API_KEY = os.getenv("API_FOOTBALL_KEY")
-headers = {
-    "x-apisports-key": API_KEY
-}
+HEADERS = {"x-apisports-key": API_KEY}
 
-# 🔄 Ambil semua fixture hari ini yang belum mulai (status: NS)
-def get_fixtures_today():
-    today = datetime.now().strftime("%Y-%m-%d")
-    url = "https://v3.football.api-sports.io/fixtures"
-    params = {
-        "status": "NS",
-        "date": today
-    }
-    response = requests.get(url, headers=headers, params=params)
-    data = response.json()
-    return data.get("response", [])
+# Liga yang ingin difilter
+LEAGUE_IDS = [
+    39, 40, 41, 61, 71, 72, 78, 88, 89, 94, 98, 103,
+    128, 129, 135, 140, 141, 144, 169, 197, 203, 239,
+    253, 262, 265, 290, 292, 296, 301, 305, 308, 345
+]
 
-# 📊 Ambil prediksi berdasarkan 1 fixture lengkap (bukan hanya ID)
-def get_prediction(fixture):
-    fixture_id = fixture["fixture"]["id"]
-    home_team = fixture["teams"]["home"]["name"]
-    away_team = fixture["teams"]["away"]["name"]
+def convert_form(form):
+    return form.replace("W", "✅").replace("L", "❌").replace("D", "🔘") if form else ""
 
-    # Konversi waktu UTC ke Asia/Jakarta
-    utc_time = datetime.strptime(fixture["fixture"]["date"], "%Y-%m-%dT%H:%M:%S%z")
-    jakarta_time = utc_time.astimezone(pytz.timezone("Asia/Jakarta"))
-    waktu_main = jakarta_time.strftime("%H:%M %d-%m-%Y")
-
-    # Ambil prediksi dari API
-    url = "https://v3.football.api-sports.io/predictions"
-    params = {"fixture": fixture_id}
-    response = requests.get(url, headers=headers, params=params)
-    data = response.json()
-
-    if data.get("response"):
-        p = data["response"][0]["predictions"]
-        winner = p.get("winner", {})
-        advice = p.get("advice", "-")
-        win_name = winner.get("name", "Tidak ada prediksi")
-        comment = winner.get("comment", "")
-        
-        return (
-            f"⚽ *{home_team} vs {away_team}*\n"
-            f"🕒 *Kickoff:* `{waktu_main}` WIB\n"
-            f"🏆 *Prediksi Pemenang:* _{win_name}_ ({comment})\n"
-            f"💡 *Saran:* _{advice}_"
-        )
-    else:
-        return (
-            f"⚽ *{home_team} vs {away_team}*\n"
-            f"🕒 *Kickoff:* `{waktu_main}` WIB\n"
-            f"❌ Prediksi tidak tersedia."
-        )
-
-# 🧠 Command /prediksi
 async def prediksi(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("🔄 Mengambil prediksi semua pertandingan hari ini...")
-    fixtures = get_fixtures_today()
+    keyboard = [
+        [InlineKeyboardButton("📅 Today", callback_data="today"),
+         InlineKeyboardButton("📅 Tomorrow", callback_data="tomorrow")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await update.message.reply_text("Pilih tanggal prediksi:", reply_markup=reply_markup)
 
-    if not fixtures:
-        await update.message.reply_text("❌ Tidak ada pertandingan hari ini.")
+async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    date = datetime.now(pytz.timezone("Asia/Jakarta"))
+    if query.data == "tomorrow":
+        date += timedelta(days=1)
+
+    date_str = date.strftime("%Y-%m-%d")
+    fixtures_url = f"https://v3.football.api-sports.io/fixtures?date={date_str}&status=NS"
+    response = requests.get(fixtures_url, headers=HEADERS).json()
+
+    rows = []
+    for fixture in response.get("response", []):
+        league_id = fixture["league"]["id"]
+        fixture_id = fixture["fixture"]["id"]
+
+        if league_id not in LEAGUE_IDS:
+            continue
+
+        prediction_url = f"https://v3.football.api-sports.io/predictions?fixture={fixture_id}"
+        pred_res = requests.get(prediction_url, headers=HEADERS).json()
+
+        if pred_res["results"] == 0:
+            continue
+
+        pred = pred_res["response"][0]["predictions"]
+        teams = pred_res["response"][0]["teams"]
+
+        home = teams["home"]["name"]
+        away = teams["away"]["name"]
+        form_home = convert_form(teams["home"].get("league", {}).get("form", ""))
+        form_away = convert_form(teams["away"].get("league", {}).get("form", ""))
+
+        winner = pred["winner"]["name"] if pred["winner"] else "-"
+        advice = pred.get("advice", "-")
+        percent = pred.get("percent", {})
+
+        rows.append({
+            "Tanggal": date_str,
+            "Home": home,
+            "Away": away,
+            "Form Home": form_home,
+            "Form Away": form_away,
+            "Prediksi": winner,
+            "Advice": advice,
+            "Persen Home": percent.get("home", "-"),
+            "Persen Draw": percent.get("draw", "-"),
+            "Persen Away": percent.get("away", "-")
+        })
+
+    if not rows:
+        await query.message.reply_text("Tidak ada prediksi tersedia untuk tanggal tersebut.")
         return
 
-    for fixture in fixtures:
-        prediksi_text = get_prediction(fixture)
-        await update.message.reply_text(prediksi_text, parse_mode="Markdown")
-        time.sleep(1.2)  # Jeda agar tidak spam API
+    df = pd.DataFrame(rows)
+    file_path = "/tmp/prediksi.xlsx"
+    df.to_excel(file_path, index=False)
 
-# 🚀 Jalankan Bot
+    await query.message.reply_document(document=open(file_path, "rb"), filename=f"prediksi_{date_str}.xlsx")
+
+# Jalankan bot polling
 if __name__ == "__main__":
     app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
     app.add_handler(CommandHandler("prediksi", prediksi))
-    print("✅ Bot berjalan... kirim /prediksi di Telegram")
+    app.add_handler(CallbackQueryHandler(button_handler))
+
+    logging.info("Bot dimulai 🚀")
     app.run_polling()
