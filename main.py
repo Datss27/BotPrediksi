@@ -100,7 +100,7 @@ async def on_button(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
     # Kirim dokumen prediksi ke chat
     await ctx.bot.send_document(chat_id=query.message.chat_id, document=open(fn, "rb"),
-                                caption=f"Prediksi {date_str} ({count} pertandingan)")
+                                caption=f"Eksekusi dari ({count} pertandingan) hari ini")
 
     os.remove(fn)
 def main():
