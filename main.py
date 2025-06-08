@@ -71,7 +71,11 @@ def fetch_and_create(date_str):
         width = max(len(str(c.value)) for c in col if c.value) + 2
         ws.column_dimensions[col[0].column_letter].width = width
 
-    fn = f"prediksi_{date_str}_{datetime.now().strftime('%H%M%S')}.xlsx"
+    if date_str == datetime.today().strftime("%Y-%m-%d"):
+        fn = "Prediksi hari ini.xlsx"
+    else:
+        fn = "Prediksi besok.xlsx"
+
     wb.save(fn)
     return fn, len(filtered)
 
