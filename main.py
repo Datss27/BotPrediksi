@@ -22,11 +22,14 @@ liga_ids = load_ligas()
 def get_default_timezone():
     try:
         res = requests.get(f"{BASE_URL}/timezone", headers=HEADERS)
-        data = res.json().get("response", [])
-        return data[0] if data else "UTC"
+        zones = res.json().get("response", [])
+        for z in zones:
+            if "Asia/Jakarta" in z:
+                return z
+        return "UTC"
     except:
         return "UTC"
-
+        
 def fetch_and_create(date_str):
     tz = get_default_timezone()
     params = {"date": date_str, "status": "NS", "timezone": tz}
