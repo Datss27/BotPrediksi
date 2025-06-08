@@ -85,13 +85,20 @@ async def cmd_prediksi(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 async def on_button(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
+
     cb = query.data
     date_str = datetime.today().strftime("%Y-%m-%d") if cb == "pr_today" else (datetime.today() + timedelta(days=1)).strftime("%Y-%m-%d")
+
+    # Edit pesan, hapus tombol dan beri info loading
+    await query.edit_message_text(text=f"Eksekusi prediksi untuk {date_str} Boskuuu")
+
     fn, count = fetch_and_create(date_str)
+
+    # Kirim dokumen prediksi ke chat
     await ctx.bot.send_document(chat_id=query.message.chat_id, document=open(fn, "rb"),
                                 caption=f"Prediksi {date_str} ({count} pertandingan)")
-    os.remove(fn)
 
+    os.remove(fn)
 def main():
     app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
     app.add_handler(CommandHandler("prediksi", cmd_prediksi))
