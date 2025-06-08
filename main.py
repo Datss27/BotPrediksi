@@ -1,9 +1,8 @@
-import os, sys, json, requests
+import os, json, requests
 from datetime import datetime, timedelta
 from dateutil import parser
-import pytz
 from openpyxl import Workbook
-from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+from openpyxl.styles import Font, Alignment, PatternFill
 from openpyxl.utils import get_column_letter
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
@@ -12,9 +11,7 @@ from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandle
 API_SPORTS_KEY = os.getenv("API_FOOTBALL_KEY")
 BASE_URL = "https://v3.football.api-sports.io"
 HEADERS = {"x-apisports-key": API_SPORTS_KEY}
-
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
-CHAT_ID = None  # akan diambil secara dinamis dari update.message.chat_id
 
 def load_ligas():
     with open("liga.json", "r", encoding="utf-8") as f:
@@ -22,8 +19,17 @@ def load_ligas():
 
 liga_ids = load_ligas()
 
+def get_default_timezone():
+    try:
+        res = requests.get(f"{BASE_URL}/timezone", headers=HEADERS)
+        data = res.json().get("response", [])
+        return data[0] if data else "UTC"
+    except:
+        return "UTC"
+
 def fetch_and_create(date_str):
-    params = {"date": date_str, "status": "NS"}
+    tz = get_default_timezone()
+    params = {"date": date_str, "status": "NS", "timezone": tz}
     res = requests.get(f"{BASE_URL}/fixtures", headers=HEADERS, params=params)
     fixtures = res.json().get("response", [])
     filtered = [f for f in fixtures if f["league"]["id"] in liga_ids]
@@ -49,8 +55,7 @@ def fetch_and_create(date_str):
         fid = f["fixture"]["id"]
         home = f["teams"]["home"]["name"]
         away = f["teams"]["away"]["name"]
-        utc_dt = parser.isoparse(f["fixture"]["date"])
-        waktu = utc_dt.astimezone(pytz.timezone("Asia/Jakarta")).strftime("%d-%m-%Y %H:%M WIB")
+        waktu = parser.isoparse(f["fixture"]["date"]).strftime("%d-%m-%Y %H:%M") + f" {tz}"
         pred = requests.get(f"{BASE_URL}/predictions", headers=HEADERS, params={"fixture": fid}).json().get("response",[])
         if not pred: continue
         p = pred[0]["predictions"]
@@ -66,7 +71,6 @@ def fetch_and_create(date_str):
             home_form, away_form
         ])
 
-    # Autosize
     for col in ws.columns:
         width = max(len(str(c.value)) for c in col if c.value) + 2
         ws.column_dimensions[col[0].column_letter].width = width
@@ -92,17 +96,13 @@ async def on_button(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
     cb = query.data
     date_str = datetime.today().strftime("%Y-%m-%d") if cb == "pr_today" else (datetime.today() + timedelta(days=1)).strftime("%Y-%m-%d")
-
-    # Edit pesan, hapus tombol dan beri info loading
     await query.edit_message_text(text=f"Eksekusi prediksi untuk {date_str} Boskuuu")
 
     fn, count = fetch_and_create(date_str)
-
-    # Kirim dokumen prediksi ke chat
     await ctx.bot.send_document(chat_id=query.message.chat_id, document=open(fn, "rb"),
-                                caption=f"Eksekusi dari ({count} pertandingan) hari ini")
-
+                                caption=f"Eksekusi dari ({count} pertandingan)")
     os.remove(fn)
+
 def main():
     app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
     app.add_handler(CommandHandler("prediksi", cmd_prediksi))
