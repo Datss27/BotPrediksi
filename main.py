@@ -82,6 +82,58 @@ def fetch_and_create(date_str):
     wb.save(fn)
     return fn, len(filtered)
 
+def fetch_all_predictions(date_str):
+    tz = get_default_timezone()
+    params = {"date": date_str, "status": "NS", "timezone": tz}
+    res = requests.get(f"{BASE_URL}/fixtures", headers=HEADERS, params=params)
+    fixtures = res.json().get("response", [])
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = f"Prediksi {date_str}"
+    headers_excel = [
+        "Liga","Home","Away","Waktu","Prediksi","Saran",
+        "Prob Home","Prob Draw","Prob Away",
+        "Form Home","Form Away"
+    ]
+    ws.append(headers_excel)
+
+    fill_header = PatternFill("solid", fgColor="FFD966")
+    for cell in ws[1]:
+        cell.font = Font(bold=True)
+        cell.alignment = Alignment(horizontal="center")
+        cell.fill = fill_header
+    ws.auto_filter.ref = f"A1:{get_column_letter(len(headers_excel))}1"
+
+    for f in fixtures:
+        fid = f["fixture"]["id"]
+        home = f["teams"]["home"]["name"]
+        away = f["teams"]["away"]["name"]
+        waktu = parser.isoparse(f["fixture"]["date"]).strftime("%d-%m-%Y %H:%M") + f" {tz}"
+        pred = requests.get(f"{BASE_URL}/predictions", headers=HEADERS, params={"fixture": fid}).json().get("response",[])
+        if not pred: continue
+        p = pred[0]["predictions"]
+        winner = p.get("winner",{}).get("name","-")
+        advice = p.get("advice","-")
+        percent = p.get("percent", {})
+        home_form = pred[0]["teams"]["home"]["last_5"]["form"]
+        away_form = pred[0]["teams"]["away"]["last_5"]["form"]
+
+        league_name = f["league"]["name"]
+        ws.append([
+            league_name, home, away, waktu, winner, advice,
+            percent.get("home"), percent.get("draw"), percent.get("away"),
+            home_form, away_form
+        ])
+
+    for col in ws.columns:
+        width = max(len(str(c.value)) for c in col if c.value) + 2
+        ws.column_dimensions[col[0].column_letter].width = width
+
+    fn = f"Semua_Prediksi_{date_str}.xlsx"
+    wb.save(fn)
+    return fn, len(fixtures)
+
 async def cmd_prediksi(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("Hari Ini", callback_data="pr_today")],
@@ -89,23 +141,39 @@ async def cmd_prediksi(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     ])
     await update.message.reply_text("Pilih prediksi:", reply_markup=kb)
 
+async def cmd_semua_prediksi(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("Hari Ini", callback_data="allpr_today")],
+        [InlineKeyboardButton("Besok", callback_data="allpr_tomorrow")]
+    ])
+    await update.message.reply_text("Pilih tanggal untuk semua prediksi:", reply_markup=kb)
+
 async def on_button(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
 
     cb = query.data
-    date_str = datetime.today().strftime("%Y-%m-%d") if cb == "pr_today" else (datetime.today() + timedelta(days=1)).strftime("%Y-%m-%d")
-    await query.edit_message_text(text=f"Eksekusi prediksi untuk {date_str} Boskuuu")
-
-    fn, count = fetch_and_create(date_str)
-    await ctx.bot.send_document(chat_id=query.message.chat_id, document=open(fn, "rb"),
-                                caption=f"Eksekusi dari ({count} pertandingan)")
-    os.remove(fn)
+    today = datetime.today()
+    if cb in ("pr_today", "pr_tomorrow"):
+        date_str = today.strftime("%Y-%m-%d") if cb == "pr_today" else (today + timedelta(days=1)).strftime("%Y-%m-%d")
+        await query.edit_message_text(text=f"Eksekusi prediksi untuk {date_str} Boskuuu")
+        fn, count = fetch_and_create(date_str)
+        await ctx.bot.send_document(chat_id=query.message.chat_id, document=open(fn, "rb"),
+                                    caption=f"Eksekusi dari ({count} pertandingan)")
+        os.remove(fn)
+    elif cb in ("allpr_today", "allpr_tomorrow"):
+        date_str = today.strftime("%Y-%m-%d") if cb == "allpr_today" else (today + timedelta(days=1)).strftime("%Y-%m-%d")
+        await query.edit_message_text(text=f"Eksekusi SEMUA prediksi untuk {date_str} Boss!")
+        fn, count = fetch_all_predictions(date_str)
+        await ctx.bot.send_document(chat_id=query.message.chat_id, document=open(fn, "rb"),
+                                    caption=f"Total semua prediksi: {count} pertandingan")
+        os.remove(fn)
 
 def main():
     app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
     app.add_handler(CommandHandler("prediksi", cmd_prediksi))
-    app.add_handler(CallbackQueryHandler(on_button, pattern="^pr_"))
+    app.add_handler(CommandHandler("semua", cmd_semua_prediksi))
+    app.add_handler(CallbackQueryHandler(on_button, pattern="^(pr_|allpr_)"))
     app.run_polling()
 
 if __name__ == "__main__":
