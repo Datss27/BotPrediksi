@@ -74,7 +74,7 @@ def create_workbook(
     ws.title = f"Prediksi {date_str}"
 
     headers = [
-        "Liga", "Home", "Away", "Waktu", "Prediksi", "Saran",
+        "Negara", "Liga", "Home", "Away", "Waktu", "Prediksi", "Saran",
         "Prob Home", "Prob Draw", "Prob Away",
         "Form Home", "Form Away",
     ]
@@ -111,6 +111,7 @@ def create_workbook(
         league_name = LIGA_FILTER.get(liga_id, f["league"]["name"]) if filter_liga else f["league"]["name"]
 
         ws.append([
+            f["league"]["country"],
             league_name,
             f["teams"]["home"]["name"],
             f["teams"]["away"]["name"],
