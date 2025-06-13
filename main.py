@@ -19,6 +19,7 @@ from telegram.ext import (
     ContextTypes,
 )
 from fastapi import FastAPI
+from fastapi import Request
 import uvicorn
 
 # Configure logging
@@ -39,18 +40,12 @@ BASE_URL = "https://v3.football.api-sports.io"
 HEADERS = {"x-apisports-key": API_SPORTS_KEY}
 TIMEZONE = os.getenv("TIMEZONE", "Asia/Jakarta")
 
+
 if not API_SPORTS_KEY or not TELEGRAM_TOKEN or not WEBHOOK_URL:
     logger.error("Missing required environment variables")
     raise RuntimeError("Missing API key, Telegram token, or Webhook URL")
 
-
-app_web = FastAPI()
-
-@app_web.get("/")
-def root():
-    return {"message": "Bot is running via webhook!"}
-
-
+# Load liga filter
 def load_ligas(path: str = LIGA_FILE) -> Dict[int, str]:
     with open(path, encoding="utf-8") as f:
         data = json.load(f)
@@ -58,6 +53,11 @@ def load_ligas(path: str = LIGA_FILE) -> Dict[int, str]:
 
 LIGA_FILTER = load_ligas()
 
+# Create FastAPI app
+app_web = FastAPI()
+
+# Create Telegram bot app globally
+bot_app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
 
 def create_workbook(
     fixtures: List[Dict[str, Any]],
@@ -177,69 +177,59 @@ async def fetch_fixtures(date_str: str) -> List[Dict[str, Any]]:
         return await asyncio.gather(*tasks)
 
 
-async def handle_prediksi(update: Update, ctx: ContextTypes.DEFAULT_TYPE, all_flag: bool = False) -> None:
-    query = update.callback_query
-    await query.answer()
-
-    choice = query.data
-    today = datetime.now()
-    target = today if choice.endswith("today") else today + timedelta(days=1)
-    date_str = target.strftime("%Y-%m-%d")
-
-    await query.edit_message_text(text=f"Memproses prediksi untuk {date_str}...")
-    fixtures = await fetch_fixtures(date_str)
-    fn, count = create_workbook(fixtures, filter_liga=not all_flag)
-
-    caption = (
-        f"Total prediksi: {count} pertandingan"
-        if not all_flag else f"Total semua prediksi: {count} pertandingan"
-    )
-    await ctx.bot.send_document(
-        chat_id=query.message.chat_id,
-        document=open(fn, "rb"),
-        caption=caption,
-    )
-    os.remove(fn)
-
-
-async def cmd_prediksi(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+# Telegram handlers
+async def cmd_prediksi(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("Hari Ini", callback_data="pr_today")],
         [InlineKeyboardButton("Besok", callback_data="pr_tomorrow")],
     ])
     await update.message.reply_text("Pilih prediksi liga tertentu:", reply_markup=kb)
 
-
-async def cmd_semua(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+async def cmd_semua(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("Hari Ini", callback_data="allpr_today")],
         [InlineKeyboardButton("Besok", callback_data="allpr_tomorrow")],
     ])
     await update.message.reply_text("Pilih prediksi untuk semua liga:", reply_markup=kb)
 
+async def handle_prediksi(update: Update, ctx: ContextTypes.DEFAULT_TYPE, all_flag: bool):
+    query = update.callback_query
+    await query.answer()
+    choice = query.data
+    today = datetime.now()
+    target = today if choice.endswith("today") else today + timedelta(days=1)
+    date_str = target.strftime("%Y-%m-%d")
+    await query.edit_message_text(text=f"Memproses prediksi untuk {date_str}...")
+    fixtures = await fetch_fixtures(date_str)
+    fn, count = create_workbook(fixtures, filter_liga=not all_flag)
+    cap = f"Total prediksi: {count} pertandingan" if not all_flag else f"Total semua prediksi: {count} pertandingan"
+    await ctx.bot.send_document(chat_id=query.message.chat_id, document=open(fn, "rb"), caption=cap)
+    os.remove(fn)
 
+bot_app.add_handler(CommandHandler("prediksi", cmd_prediksi))
+bot_app.add_handler(CommandHandler("semua", cmd_semua))
+bot_app.add_handler(CallbackQueryHandler(lambda u, c: handle_prediksi(u, c, False), pattern="^pr_"))
+bot_app.add_handler(CallbackQueryHandler(lambda u, c: handle_prediksi(u, c, True), pattern="^allpr_"))
+    
+    # FastAPI endpoints
+@app_web.get("/")
+def root():
+    return {"status": "running"}
+
+@app_web.post("/telegram")
+async def telegram_webhook(request: Request):
+    data = await request.json()
+    update = Update.de_json(data, bot_app.bot)
+    await bot_app.update_queue.put(update)
+    return {"ok": True}
+
+# Startup event
 @app_web.on_event("startup")
-async def startup_event():
-    from telegram.ext import Application
-    bot_app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
-
-    bot_app.add_handler(CommandHandler("prediksi", cmd_prediksi))
-    bot_app.add_handler(CommandHandler("semua", cmd_semua))
-    bot_app.add_handler(
-        CallbackQueryHandler(lambda u, c: handle_prediksi(u, c, all_flag=False), pattern="^pr_")
-    )
-    bot_app.add_handler(
-        CallbackQueryHandler(lambda u, c: handle_prediksi(u, c, all_flag=True), pattern="^allpr_")
-    )
-
-    await bot_app.bot.set_webhook(url=f"{WEBHOOK_URL}/telegram")
-    bot_app.run_webhook(
-        listen="0.0.0.0",
-        port=PORT,
-        webhook_url=f"{WEBHOOK_URL}/telegram",
-        web_app=app_web,
-    )
-
+async def on_startup():
+    await bot_app.initialize()
+    await bot_app.start()
+    await bot_app.bot.set_webhook(f"{WEBHOOK_URL}/telegram")
+    logger.info("Bot initialized and webhook set to %s/telegram", WEBHOOK_URL)
 
 if __name__ == "__main__":
-    uvicorn.run("main:app_web", host="0.0.0.0", port=PORT, reload=False)
+    uvicorn.run("main:app_web", host="0.0.0.0", port=PORT)
