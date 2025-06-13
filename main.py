@@ -1,180 +1,217 @@
-import os, json, requests
+import os
+import json
+import logging
+import tempfile
 from datetime import datetime, timedelta
+from typing import List, Tuple, Dict, Any
+
+import aiohttp
+import asyncio
 from dateutil import parser
 from openpyxl import Workbook
 from openpyxl.styles import Font, Alignment, PatternFill
 from openpyxl.utils import get_column_letter
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram.ext import (
+    ApplicationBuilder,
+    CommandHandler,
+    CallbackQueryHandler,
+    ContextTypes,
+)
+from fastapi import FastAPI
+import uvicorn
 
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, ContextTypes
+# Configure logging
+logging.basicConfig(
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    level=logging.INFO,
+)
+logger = logging.getLogger(__name__)
 
+# Environment variables
 API_SPORTS_KEY = os.getenv("API_FOOTBALL_KEY")
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
+WEBHOOK_URL = os.getenv("WEBHOOK_URL")  # contoh: https://your-project.up.railway.app
+PORT = int(os.getenv("PORT", 8080))
+
+LIGA_FILE = "liga.json"
 BASE_URL = "https://v3.football.api-sports.io"
 HEADERS = {"x-apisports-key": API_SPORTS_KEY}
-TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
+TIMEZONE = os.getenv("TIMEZONE", "Asia/Jakarta")
 
-def load_ligas():
-    with open("liga.json", "r", encoding="utf-8") as f:
-        return {l["id"]: l["nama"] for l in json.load(f)}
+if not API_SPORTS_KEY or not TELEGRAM_TOKEN or not WEBHOOK_URL:
+    logger.error("Missing required environment variables")
+    raise RuntimeError("Missing API key, Telegram token, or Webhook URL")
 
-liga_ids = load_ligas()
 
-def get_default_timezone():
-    try:
-        res = requests.get(f"{BASE_URL}/timezone", headers=HEADERS)
-        zones = res.json().get("response", [])
-        for z in zones:
-            if "Asia/Jakarta" in z:
-                return z
-        return "UTC"
-    except:
-        return "UTC"
-        
-def fetch_and_create(date_str):
-    tz = get_default_timezone()
-    params = {"date": date_str, "status": "NS", "timezone": tz}
-    res = requests.get(f"{BASE_URL}/fixtures", headers=HEADERS, params=params)
-    fixtures = res.json().get("response", [])
-    filtered = [f for f in fixtures if f["league"]["id"] in liga_ids]
+app_web = FastAPI()
 
+@app_web.get("/")
+def root():
+    return {"message": "Bot is running via webhook!"}
+
+
+def load_ligas(path: str = LIGA_FILE) -> Dict[int, str]:
+    with open(path, encoding="utf-8") as f:
+        data = json.load(f)
+    return {item["id"]: item["nama"] for item in data}
+
+LIGA_FILTER = load_ligas()
+
+
+def create_workbook(
+    fixtures: List[Dict[str, Any]],
+    filter_liga: bool = True,
+) -> Tuple[str, int]:
     wb = Workbook()
     ws = wb.active
-    ws.title = f"Prediksi {date_str}"
-    headers_excel = [
-        "Liga","Home","Away","Waktu","Prediksi","Saran",
-        "Prob Home","Prob Draw","Prob Away",
-        "Form Home","Form Away"
-    ]
-    ws.append(headers_excel)
+    date_str = datetime.now().strftime("%Y-%m-%d")
+    title = f"Prediksi {date_str}"
+    ws.title = title
 
-    fill_header = PatternFill("solid", fgColor="FFD966")
+    headers = [
+        "Liga", "Home", "Away", "Waktu", "Prediksi", "Saran",
+        "Prob Home", "Prob Draw", "Prob Away",
+        "Form Home", "Form Away",
+    ]
+    ws.append(headers)
+
+    header_fill = PatternFill("solid", fgColor="FFD966")
     for cell in ws[1]:
         cell.font = Font(bold=True)
         cell.alignment = Alignment(horizontal="center")
-        cell.fill = fill_header
-    ws.auto_filter.ref = f"A1:{get_column_letter(len(headers_excel))}1"
+        cell.fill = header_fill
+    ws.auto_filter.ref = f"A1:{get_column_letter(len(headers))}1"
 
-    for f in filtered:
-        fid = f["fixture"]["id"]
-        home = f["teams"]["home"]["name"]
-        away = f["teams"]["away"]["name"]
-        waktu = parser.isoparse(f["fixture"]["date"]).strftime("%d-%m-%Y %H:%M") + f" {tz}"
-        pred = requests.get(f"{BASE_URL}/predictions", headers=HEADERS, params={"fixture": fid}).json().get("response",[])
-        if not pred: continue
-        p = pred[0]["predictions"]
-        winner = p.get("winner",{}).get("name","-")
-        advice = p.get("advice","-")
-        percent = p.get("percent", {})
-        home_form = pred[0]["teams"]["home"]["last_5"]["form"]
-        away_form = pred[0]["teams"]["away"]["last_5"]["form"]
-
-        ws.append([
-            liga_ids[f["league"]["id"]], home, away, waktu, winner, advice,
-            percent.get("home"), percent.get("draw"), percent.get("away"),
-            home_form, away_form
-        ])
-
-    for col in ws.columns:
-        width = max(len(str(c.value)) for c in col if c.value) + 2
-        ws.column_dimensions[col[0].column_letter].width = width
-
-    fn = f"Prediksi_{date_str}.xlsx"
-    wb.save(fn)
-    return fn, len(filtered)
-
-def fetch_all_predictions(date_str):
-    tz = get_default_timezone()
-    params = {"date": date_str, "status": "NS", "timezone": tz}
-    res = requests.get(f"{BASE_URL}/fixtures", headers=HEADERS, params=params)
-    fixtures = res.json().get("response", [])
-
-    wb = Workbook()
-    ws = wb.active
-    ws.title = f"Prediksi {date_str}"
-    headers_excel = [
-        "Liga","Home","Away","Waktu","Prediksi","Saran",
-        "Prob Home","Prob Draw","Prob Away",
-        "Form Home","Form Away"
-    ]
-    ws.append(headers_excel)
-
-    fill_header = PatternFill("solid", fgColor="FFD966")
-    for cell in ws[1]:
-        cell.font = Font(bold=True)
-        cell.alignment = Alignment(horizontal="center")
-        cell.fill = fill_header
-    ws.auto_filter.ref = f"A1:{get_column_letter(len(headers_excel))}1"
-
+    count = 0
     for f in fixtures:
-        fid = f["fixture"]["id"]
-        home = f["teams"]["home"]["name"]
-        away = f["teams"]["away"]["name"]
-        waktu = parser.isoparse(f["fixture"]["date"]).strftime("%d-%m-%Y %H:%M") + f" {tz}"
-        pred = requests.get(f"{BASE_URL}/predictions", headers=HEADERS, params={"fixture": fid}).json().get("response",[])
-        if not pred: continue
-        p = pred[0]["predictions"]
-        winner = p.get("winner",{}).get("name","-")
-        advice = p.get("advice","-")
-        percent = p.get("percent", {})
-        home_form = pred[0]["teams"]["home"]["last_5"]["form"]
-        away_form = pred[0]["teams"]["away"]["last_5"]["form"]
+        liga_id = f["league"]["id"]
+        if filter_liga and liga_id not in LIGA_FILTER:
+            continue
+        pred_data = f.get("prediction")
+        if not pred_data:
+            continue
 
-        league_name = f["league"]["name"]
+        league_name = LIGA_FILTER.get(liga_id, f["league"]["name"]) if filter_liga else f["league"]["name"]
+        fixture_date = parser.isoparse(f["fixture"]["date"]).astimezone(tz=None)
+        waktu = fixture_date.strftime("%d-%m-%Y %H:%M %Z")
+
+        p = pred_data[0]["predictions"]
+        winner = p.get("winner", {}).get("name", "-")
+        advice = p.get("advice", "-")
+        percent = p.get("percent", {})
+        home_form = pred_data[0]["teams"]["home"]["last_5"]["form"]
+        away_form = pred_data[0]["teams"]["away"]["last_5"]["form"]
+
         ws.append([
-            league_name, home, away, waktu, winner, advice,
-            percent.get("home"), percent.get("draw"), percent.get("away"),
-            home_form, away_form
+            league_name,
+            f["teams"]["home"]["name"],
+            f["teams"]["away"]["name"],
+            waktu,
+            winner,
+            advice,
+            percent.get("home"),
+            percent.get("draw"),
+            percent.get("away"),
+            home_form,
+            away_form,
         ])
+        count += 1
 
     for col in ws.columns:
-        width = max(len(str(c.value)) for c in col if c.value) + 2
-        ws.column_dimensions[col[0].column_letter].width = width
+        max_length = max(len(str(cell.value)) for cell in col if cell.value is not None)
+        ws.column_dimensions[col[0].column_letter].width = max_length + 2
 
-    fn = f"Semua_Prediksi_{date_str}.xlsx"
-    wb.save(fn)
-    return fn, len(fixtures)
+    tmp = tempfile.NamedTemporaryFile(prefix="prediksi_", suffix=".xlsx", delete=False)
+    wb.save(tmp.name)
+    logger.info("Workbook saved: %s with %d entries", tmp.name, count)
+    return tmp.name, count
 
-async def cmd_prediksi(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("Hari Ini", callback_data="pr_today")],
-        [InlineKeyboardButton("Besok", callback_data="pr_tomorrow")]
-    ])
-    await update.message.reply_text("Pilih prediksi:", reply_markup=kb)
 
-async def cmd_semua_prediksi(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("Hari Ini", callback_data="allpr_today")],
-        [InlineKeyboardButton("Besok", callback_data="allpr_tomorrow")]
-    ])
-    await update.message.reply_text("Pilih tanggal untuk semua prediksi:", reply_markup=kb)
+async def fetch_fixtures(date_str: str) -> List[Dict[str, Any]]:
+    url = f"{BASE_URL}/fixtures"
+    params = {"date": date_str, "status": "NS", "timezone": TIMEZONE}
+    async with aiohttp.ClientSession(headers=HEADERS) as session:
+        async with session.get(url, params=params) as resp:
+            data = await resp.json()
+    fixtures = data.get("response", [])
 
-async def on_button(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    async def attach_prediction(fixture: Dict[str, Any]) -> Dict[str, Any]:
+        fid = fixture["fixture"]["id"]
+        pred_url = f"{BASE_URL}/predictions"
+        async with aiohttp.ClientSession(headers=HEADERS) as s2:
+            async with s2.get(pred_url, params={"fixture": fid}) as presp:
+                pdata = await presp.json()
+        fixture["prediction"] = pdata.get("response", [])
+        return fixture
+
+    tasks = [attach_prediction(f) for f in fixtures]
+    return await asyncio.gather(*tasks)
+
+
+async def handle_prediksi(update: Update, ctx: ContextTypes.DEFAULT_TYPE, all_flag: bool = False) -> None:
     query = update.callback_query
     await query.answer()
 
-    cb = query.data
-    today = datetime.today()
-    if cb in ("pr_today", "pr_tomorrow"):
-        date_str = today.strftime("%Y-%m-%d") if cb == "pr_today" else (today + timedelta(days=1)).strftime("%Y-%m-%d")
-        await query.edit_message_text(text=f"Eksekusi prediksi untuk {date_str} Boskuuu")
-        fn, count = fetch_and_create(date_str)
-        await ctx.bot.send_document(chat_id=query.message.chat_id, document=open(fn, "rb"),
-                                    caption=f"Eksekusi dari ({count} pertandingan)")
-        os.remove(fn)
-    elif cb in ("allpr_today", "allpr_tomorrow"):
-        date_str = today.strftime("%Y-%m-%d") if cb == "allpr_today" else (today + timedelta(days=1)).strftime("%Y-%m-%d")
-        await query.edit_message_text(text=f"Eksekusi SEMUA prediksi untuk {date_str} Boss!")
-        fn, count = fetch_all_predictions(date_str)
-        await ctx.bot.send_document(chat_id=query.message.chat_id, document=open(fn, "rb"),
-                                    caption=f"Total semua prediksi: {count} pertandingan")
-        os.remove(fn)
+    choice = query.data
+    today = datetime.now()
+    target = today if choice.endswith("today") else today + timedelta(days=1)
+    date_str = target.strftime("%Y-%m-%d")
 
-def main():
-    app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
-    app.add_handler(CommandHandler("prediksi", cmd_prediksi))
-    app.add_handler(CommandHandler("semua", cmd_semua_prediksi))
-    app.add_handler(CallbackQueryHandler(on_button, pattern="^(pr_|allpr_)"))
-    app.run_polling()
+    await query.edit_message_text(text=f"Memproses prediksi untuk {date_str}...")
+    fixtures = await fetch_fixtures(date_str)
+    fn, count = create_workbook(fixtures, filter_liga=not all_flag)
+
+    caption = (
+        f"Total prediksi: {count} pertandingan"
+        if not all_flag else f"Total semua prediksi: {count} pertandingan"
+    )
+    await ctx.bot.send_document(
+        chat_id=query.message.chat_id,
+        document=open(fn, "rb"),
+        caption=caption,
+    )
+    os.remove(fn)
+
+
+async def cmd_prediksi(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("Hari Ini", callback_data="pr_today")],
+        [InlineKeyboardButton("Besok", callback_data="pr_tomorrow")],
+    ])
+    await update.message.reply_text("Pilih prediksi liga tertentu:", reply_markup=kb)
+
+
+async def cmd_semua(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("Hari Ini", callback_data="allpr_today")],
+        [InlineKeyboardButton("Besok", callback_data="allpr_tomorrow")],
+    ])
+    await update.message.reply_text("Pilih prediksi untuk semua liga:", reply_markup=kb)
+
+
+@app_web.on_event("startup")
+async def startup_event():
+    from telegram.ext import Application
+    bot_app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
+
+    bot_app.add_handler(CommandHandler("prediksi", cmd_prediksi))
+    bot_app.add_handler(CommandHandler("semua", cmd_semua))
+    bot_app.add_handler(
+        CallbackQueryHandler(lambda u, c: handle_prediksi(u, c, all_flag=False), pattern="^pr_")
+    )
+    bot_app.add_handler(
+        CallbackQueryHandler(lambda u, c: handle_prediksi(u, c, all_flag=True), pattern="^allpr_")
+    )
+
+    await bot_app.bot.set_webhook(url=f"{WEBHOOK_URL}/telegram")
+    bot_app.run_webhook(
+        listen="0.0.0.0",
+        port=PORT,
+        webhook_url=f"{WEBHOOK_URL}/telegram",
+        web_app=app_web,
+    )
+
 
 if __name__ == "__main__":
-    main()
+    uvicorn.run("main:app_web", host="0.0.0.0", port=PORT, reload=False)
