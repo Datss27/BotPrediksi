@@ -2,24 +2,24 @@ import os
 import json
 import logging
 import tempfile
+import asyncio
 from datetime import datetime, timedelta
-from typing import List, Tuple, Dict, Any
+from typing import List, Dict, Any
 
 import aiohttp
-import asyncio
 from dateutil import parser
+from zoneinfo import ZoneInfo
+from fastapi import FastAPI, Request
 from openpyxl import Workbook
 from openpyxl.styles import Font, Alignment, PatternFill
 from openpyxl.utils import get_column_letter
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     ApplicationBuilder,
     CommandHandler,
     CallbackQueryHandler,
     ContextTypes,
 )
-from fastapi import FastAPI
-from fastapi import Request
 import uvicorn
 
 # Configure logging
@@ -30,23 +30,27 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Environment variables
+tz_name = os.getenv("TIMEZONE", "Asia/Jakarta")
 API_SPORTS_KEY = os.getenv("API_FOOTBALL_KEY")
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 WEBHOOK_URL = os.getenv("WEBHOOK_URL")  # contoh: https://your-project.up.railway.app
 PORT = int(os.getenv("PORT", 8080))
-
-LIGA_FILE = "liga.json"
 BASE_URL = "https://v3.football.api-sports.io"
 HEADERS = {"x-apisports-key": API_SPORTS_KEY}
-TIMEZONE = os.getenv("TIMEZONE", "Asia/Jakarta")
 
+# Timezone object
+try:
+    TZ = ZoneInfo(tz_name)
+except Exception:
+    logger.warning(f"Timezone '{tz_name}' tidak valid, menggunakan UTC.")
+    TZ = ZoneInfo("UTC")
 
 if not API_SPORTS_KEY or not TELEGRAM_TOKEN or not WEBHOOK_URL:
     logger.error("Missing required environment variables")
     raise RuntimeError("Missing API key, Telegram token, or Webhook URL")
 
 # Load liga filter
-def load_ligas(path: str = LIGA_FILE) -> Dict[int, str]:
+def load_ligas(path: str = "liga.json") -> Dict[int, str]:
     with open(path, encoding="utf-8") as f:
         data = json.load(f)
     return {item["id"]: item["nama"] for item in data}
@@ -59,59 +63,52 @@ app_web = FastAPI()
 # Create Telegram bot app globally
 bot_app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
 
+# Excel workbook creation
 def create_workbook(
     fixtures: List[Dict[str, Any]],
     filter_liga: bool = True,
-) -> Tuple[str, int]:
+) -> (str, int):
     wb = Workbook()
     ws = wb.active
-    date_str = datetime.now().strftime("%Y-%m-%d")
+    date_str = datetime.now(TZ).strftime("%Y-%m-%d")
     ws.title = f"Prediksi {date_str}"
+
     headers = [
         "Liga", "Home", "Away", "Waktu", "Prediksi", "Saran",
         "Prob Home", "Prob Draw", "Prob Away",
         "Form Home", "Form Away",
     ]
     ws.append(headers)
-    header_fill = PatternFill("solid", fgColor="FFD966")
+    fill = PatternFill("solid", fgColor="FFD966")
     for cell in ws[1]:
         cell.font = Font(bold=True)
         cell.alignment = Alignment(horizontal="center")
-        cell.fill = header_fill
+        cell.fill = fill
     ws.auto_filter.ref = f"A1:{get_column_letter(len(headers))}1"
 
     count = 0
     for f in fixtures:
         liga_id = f["league"]["id"]
-        # Hanya proses liga yang diinginkan (jika filter_liga=True)
         if filter_liga and liga_id not in LIGA_FILTER:
             continue
 
-        # Ambil data prediksi, jika ada
-        pred_data = f.get("prediction")
-        if pred_data:
-            p = pred_data[0]["predictions"]
-            winner = p.get("winner", {}).get("name", "-")
-            advice = p.get("advice", "-")
-            percent = p.get("percent", {})
+        pred = f.get("prediction") or []
+        if pred:
+            pdata = pred[0]["predictions"]
+            winner = pdata.get("winner", {}).get("name", "-")
+            advice = pdata.get("advice", "-")
+            percent = pdata.get("percent", {})
             home_prob = percent.get("home")
             draw_prob = percent.get("draw")
             away_prob = percent.get("away")
-            home_form = pred_data[0]["teams"]["home"]["last_5"]["form"]
-            away_form = pred_data[0]["teams"]["away"]["last_5"]["form"]
+            home_form = pred[0]["teams"]["home"]["last_5"]["form"]
+            away_form = pred[0]["teams"]["away"]["last_5"]["form"]
         else:
-            # Jika prediksi tidak tersedia, isi dengan default "-"
-            winner = "-"
-            advice = "-"
-            home_prob = "-"
-            draw_prob = "-"
-            away_prob = "-"
-            home_form = "-"
-            away_form = "-"
+            winner = advice = home_prob = draw_prob = away_prob = home_form = away_form = "-"
 
-        league_name = LIGA_FILTER.get(liga_id, f["league"]["name"]) if filter_liga else f["league"]["name"]
-        fixture_date = parser.isoparse(f["fixture"]["date"]).astimezone(tz=None)
+        fixture_date = parser.isoparse(f["fixture"]["date"]).astimezone(TZ)
         waktu = fixture_date.strftime("%d-%m-%Y %H:%M %Z")
+        league_name = LIGA_FILTER.get(liga_id, f["league"]["name"]) if filter_liga else f["league"]["name"]
 
         ws.append([
             league_name,
@@ -128,9 +125,8 @@ def create_workbook(
         ])
         count += 1
 
-    # Sesuaikan lebar kolom
     for col in ws.columns:
-        max_length = max(len(str(cell.value)) for cell in col if cell.value is not None)
+        max_length = max(len(str(cell.value)) for cell in col if cell.value)
         ws.column_dimensions[col[0].column_letter].width = max_length + 2
 
     tmp = tempfile.NamedTemporaryFile(prefix="prediksi_", suffix=".xlsx", delete=False)
@@ -138,44 +134,41 @@ def create_workbook(
     logger.info("Workbook saved: %s with %d entries", tmp.name, count)
     return tmp.name, count
 
-
+# Fetch fixtures with prediction and error handling
 async def fetch_fixtures(date_str: str) -> List[Dict[str, Any]]:
     url = f"{BASE_URL}/fixtures"
-    params = {"date": date_str, "status": "NS", "timezone": TIMEZONE}
+    params = {"date": date_str, "status": "NS", "timezone": tz_name}
 
     async with aiohttp.ClientSession(headers=HEADERS) as session:
         try:
             async with session.get(url, params=params) as resp:
                 data = await resp.json()
                 fixtures = data.get("response", [])
-                logger.info(f"Total semua pertandingan: {len(fixtures)}")
+                logger.info(f"Total fixtures fetched: {len(fixtures)}")
         except Exception as e:
-            logger.error(f"Gagal mengambil daftar fixtures: {e}")
+            logger.error(f"Error fetching fixtures: {e}")
             return []
 
-        # ✅ Filter hanya liga yang ada di LIGA_FILTER
-        filtered_fixtures = [
-            f for f in fixtures if f["league"]["id"] in LIGA_FILTER
-        ]
-        logger.info(f"Total pertandingan dari liga yang difilter: {len(filtered_fixtures)}")
+        # filter by league
+        fixtures = [f for f in fixtures if f["league"]["id"] in LIGA_FILTER]
+        logger.info(f"Fixtures after filter: {len(fixtures)}")
 
-        # ✅ Fungsi async untuk ambil prediksi dengan penanganan error
+        sem = asyncio.Semaphore(10)  # limit parallel requests
         async def attach_prediction(fixture: Dict[str, Any]) -> Dict[str, Any]:
-            fid = fixture["fixture"]["id"]
-            pred_url = f"{BASE_URL}/predictions"
-            try:
-                async with session.get(pred_url, params={"fixture": fid}) as presp:
-                    pdata = await presp.json()
+            async with sem:
+                fid = fixture["fixture"]["id"]
+                pred_url = f"{BASE_URL}/predictions"
+                try:
+                    async with session.get(pred_url, params={"fixture": fid}) as presp:
+                        pdata = await presp.json()
                     fixture["prediction"] = pdata.get("response", [])
-            except Exception as e:
-                logger.warning(f"Gagal ambil prediksi untuk fixture {fid}: {e}")
-                fixture["prediction"] = []
+                except Exception as e:
+                    logger.warning(f"Failed prediction for {fid}: {e}")
+                    fixture["prediction"] = []
             return fixture
 
-        # ✅ Buat semua permintaan prediksi secara paralel
-        tasks = [asyncio.create_task(attach_prediction(f)) for f in filtered_fixtures]
+        tasks = [asyncio.create_task(attach_prediction(f)) for f in fixtures]
         return await asyncio.gather(*tasks)
-
 
 # Telegram handlers
 async def cmd_prediksi(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -196,7 +189,7 @@ async def handle_prediksi(update: Update, ctx: ContextTypes.DEFAULT_TYPE, all_fl
     query = update.callback_query
     await query.answer()
     choice = query.data
-    today = datetime.now()
+    today = datetime.now(TZ)
     target = today if choice.endswith("today") else today + timedelta(days=1)
     date_str = target.strftime("%Y-%m-%d")
     await query.edit_message_text(text=f"Memproses prediksi untuk {date_str}...")
@@ -210,8 +203,8 @@ bot_app.add_handler(CommandHandler("prediksi", cmd_prediksi))
 bot_app.add_handler(CommandHandler("semua", cmd_semua))
 bot_app.add_handler(CallbackQueryHandler(lambda u, c: handle_prediksi(u, c, False), pattern="^pr_"))
 bot_app.add_handler(CallbackQueryHandler(lambda u, c: handle_prediksi(u, c, True), pattern="^allpr_"))
-    
-    # FastAPI endpoints
+
+# FastAPI endpoints
 @app_web.get("/")
 def root():
     return {"status": "running"}
