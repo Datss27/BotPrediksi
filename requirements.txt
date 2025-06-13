@@ -1,7 +1,6 @@
-python-telegram-bot==20.7
-requests
-pandas
+python-telegram-bot[webhooks]~=20.6
+aiohttp
 openpyxl
-python-dotenv
-pytz
 python-dateutil
+uvicorn
+fastapi
