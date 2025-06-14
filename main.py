@@ -74,9 +74,10 @@ def create_workbook(
     ws.title = f"Prediksi {date_str}"
 
     headers = [
-        "Negara", "Liga", "Home", "Away", "Waktu", "Prediksi", "Saran",
+        "Negara", "Liga", "Home", "Away", "Tanggal", "Jam", "Prediksi", "Saran",
         "Prob Home", "Prob Draw", "Prob Away",
-        "Form Home", "Form Away",
+        "Form", "ATT", "DEF",
+        "Perbandingan",
     ]
     ws.append(headers)
     fill = PatternFill("solid", fgColor="FFD966")
@@ -101,13 +102,21 @@ def create_workbook(
             home_prob = percent.get("home")
             draw_prob = percent.get("draw")
             away_prob = percent.get("away")
-            home_form = pred[0]["teams"]["home"]["last_5"]["form"]
-            away_form = pred[0]["teams"]["away"]["last_5"]["form"]
+            home_form = pred[0].get("teams", {}).get("home", {}).get("last_5", {}).get("form", "-")
+            away_form = pred[0].get("teams", {}).get("away", {}).get("last_5", {}).get("form", "-")
+            home_att = pred[0].get("teams", {}).get("home", {}).get("last_5", {}).get("att", "-")
+            away_att = pred[0].get("teams", {}).get("away", {}).get("last_5", {}).get("att", "-")
+            home_def = pred[0].get("teams", {}).get("home", {}).get("last_5", {}).get("def", "-")
+            away_def = pred[0].get("teams", {}).get("away", {}).get("last_5", {}).get("def", "-")
+            comparison_home = pred[0].get("comparison", {}).get("total", {}).get("home", "-")
+            comparison_away = pred[0].get("comparison", {}).get("total", {}).get("away", "-")
+            
         else:
-            winner = advice = home_prob = draw_prob = away_prob = home_form = away_form = "-"
+            winner = advice = home_prob = draw_prob = away_prob = home_form = away_form = home_att = away_att = home_def = away_def = comparison_home = comparison_away = "-"
 
         fixture_date = parser.isoparse(f["fixture"]["date"]).astimezone(TZ)
-        waktu = fixture_date.strftime("%d-%m-%Y %H:%M %Z")
+        tanggal = fixture_date.strftime("%d-%m-%Y")
+        jam = fixture_date.strftime("%H:%M %Z")
         league_name = LIGA_FILTER.get(liga_id, f["league"]["name"]) if filter_liga else f["league"]["name"]
 
         ws.append([
@@ -115,14 +124,17 @@ def create_workbook(
             league_name,
             f["teams"]["home"]["name"],
             f["teams"]["away"]["name"],
-            waktu,
-            winner,
+            tanggal,
+            jam,
+            winner, 
             advice,
             home_prob,
             draw_prob,
             away_prob,
-            home_form,
-            away_form,
+            f"{home_form} - {away_form}",
+            f"{home_att} - {away_att}",
+            f"{home_def} - {away_def}",
+            f"{comparison_home} - {comparison_away}",
         ])
         count += 1
 
