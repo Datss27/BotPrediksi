@@ -30,5 +30,6 @@
   { "nama": "Pro League", "id": 301 },
   { "nama": "Stars League", "id": 305 },
   { "nama": "Division 1", "id": 308 },
-  { "nama": "Czech Liga", "id": 345 }
+  { "nama": "Czech Liga", "id": 345 },
+  { "nama": "FIFA Club World Cup", "id": 15 }
 ]
