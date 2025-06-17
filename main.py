@@ -201,13 +201,6 @@ async def cmd_prediksi(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     ])
     await update.message.reply_text("Pilih prediksi liga tertentu:", reply_markup=kb)
 
-async def cmd_semua(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("Hari Ini", callback_data="allpr_today")],
-        [InlineKeyboardButton("Besok", callback_data="allpr_tomorrow")],
-    ])
-    await update.message.reply_text("Pilih prediksi untuk semua liga:", reply_markup=kb)
-
 async def handle_prediksi(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -240,7 +233,7 @@ async def handle_prediksi(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             os.remove(fn)
 
 bot_app.add_handler(CommandHandler("prediksi", cmd_prediksi))
-bot_app.add_handler(CommandHandler("semua", cmd_semua))
+
 bot_app.add_handler(CallbackQueryHandler(lambda u, c: handle_prediksi(u, c, False), pattern="^pr_"))
 bot_app.add_handler(CallbackQueryHandler(lambda u, c: handle_prediksi(u, c, True), pattern="^allpr_"))
 
