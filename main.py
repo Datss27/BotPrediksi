@@ -21,6 +21,7 @@ from telegram.ext import (
     ContextTypes,
 )
 import uvicorn
+from contextlib import asynccontextmanager
 
 # Configure logging
 logging.basicConfig(
@@ -38,6 +39,19 @@ PORT = int(os.getenv("PORT", 8080))
 BASE_URL = "https://v3.football.api-sports.io"
 HEADERS = {"x-apisports-key": API_SPORTS_KEY}
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    await bot_app.initialize()
+    await bot_app.start()
+    await bot_app.bot.set_webhook(f"{WEBHOOK_URL}/telegram")
+    logger.info("Bot initialized and webhook set to %s/telegram", WEBHOOK_URL)
+
+    yield
+
+    # Shutdown
+    await bot_app.stop()
+    logger.info("Bot stopped")
 # Timezone object
 try:
     TZ = ZoneInfo(tz_name)
@@ -58,7 +72,7 @@ def load_ligas(path: str = "liga.json") -> Dict[int, str]:
 LIGA_FILTER = load_ligas()
 
 # Create FastAPI app
-app_web = FastAPI()
+app_web = FastAPI(lifespan=lifespan)
 
 # Create Telegram bot app globally
 bot_app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
@@ -148,40 +162,61 @@ def create_workbook(
     return tmp.name, count
 
 # Fetch fixtures with prediction and error handling
-async def fetch_fixtures(date_str: str) -> List[Dict[str, Any]]:
-    url = f"{BASE_URL}/fixtures"
-    params = {"date": date_str, "status": "NS", "timezone": tz_name}
+async def fetch_fixtures(date_str: str, filter_liga: bool = True) -> List[Dict[str, Any]]:
+    """
+    Ambil semua fixtures dari API Football untuk tanggal tertentu
+    - Paginate semua halaman
+    - (opsional) filter berdasarkan LIGA_FILTER
+    - Ambil prediksi untuk masing-masing fixture
+    """
+    fixtures: List[Dict[str, Any]] = []
+    page = 1
 
     async with aiohttp.ClientSession(headers=HEADERS) as session:
-        try:
-            async with session.get(url, params=params) as resp:
+        # Pagination
+        while True:
+            params = {
+                "date": date_str,
+                "status": "NS",
+                "timezone": tz_name,
+                "page": page,
+            }
+            async with session.get(f"{BASE_URL}/fixtures", params=params) as resp:
                 data = await resp.json()
-                fixtures = data.get("response", [])
-                logger.info(f"Total fixtures fetched: {len(fixtures)}")
-        except Exception as e:
-            logger.error(f"Error fetching fixtures: {e}")
-            return []
+                page_fixtures = data.get("response", [])
 
-        # filter by league
-        fixtures = [f for f in fixtures if f["league"]["id"] in LIGA_FILTER]
-        logger.info(f"Fixtures after filter: {len(fixtures)}")
+            logger.info(f"[Page {page}] Retrieved {len(page_fixtures)} fixtures")
+            if not page_fixtures:
+                break
 
-        sem = asyncio.Semaphore(10)  # limit parallel requests
+            fixtures.extend(page_fixtures)
+            page += 1
+
+        logger.info(f"Total fixtures after pagination: {len(fixtures)}")
+
+        if filter_liga:
+            before = len(fixtures)
+            fixtures = [f for f in fixtures if f["league"]["id"] in LIGA_FILTER]
+            logger.info(f"After filter: {len(fixtures)} dari {before}")
+
+        # Prediksi paralel (dengan semaphore)
+        sem = asyncio.Semaphore(10)
+
         async def attach_prediction(fixture: Dict[str, Any]) -> Dict[str, Any]:
             async with sem:
-                fid = fixture["fixture"]["id"]
-                pred_url = f"{BASE_URL}/predictions"
                 try:
-                    async with session.get(pred_url, params={"fixture": fid}) as presp:
+                    fid = fixture["fixture"]["id"]
+                    async with session.get(f"{BASE_URL}/predictions", params={"fixture": fid}) as presp:
                         pdata = await presp.json()
                     fixture["prediction"] = pdata.get("response", [])
                 except Exception as e:
-                    logger.warning(f"Failed prediction for {fid}: {e}")
+                    logger.warning(f"Failed prediction for fixture {fid}: {e}")
                     fixture["prediction"] = []
             return fixture
 
-        tasks = [asyncio.create_task(attach_prediction(f)) for f in fixtures]
-        return await asyncio.gather(*tasks)
+        tasks = [attach_prediction(f) for f in fixtures]
+        fixtures_with_predictions = await asyncio.gather(*tasks)
+        return fixtures_with_predictions
 
 # Telegram handlers
 async def cmd_prediksi(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -228,14 +263,6 @@ async def telegram_webhook(request: Request):
     update = Update.de_json(data, bot_app.bot)
     await bot_app.update_queue.put(update)
     return {"ok": True}
-
-# Startup event
-@app_web.on_event("startup")
-async def on_startup():
-    await bot_app.initialize()
-    await bot_app.start()
-    await bot_app.bot.set_webhook(f"{WEBHOOK_URL}/telegram")
-    logger.info("Bot initialized and webhook set to %s/telegram", WEBHOOK_URL)
 
 if __name__ == "__main__":
     uvicorn.run("main:app_web", host="0.0.0.0", port=PORT)
