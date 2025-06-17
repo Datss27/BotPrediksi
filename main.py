@@ -208,19 +208,36 @@ async def cmd_semua(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     ])
     await update.message.reply_text("Pilih prediksi untuk semua liga:", reply_markup=kb)
 
-async def handle_prediksi(update: Update, ctx: ContextTypes.DEFAULT_TYPE, all_flag: bool):
+async def handle_prediksi(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
+
+    # Tentukan tanggal target (hari ini atau besok)
     choice = query.data
     today = datetime.now(TZ)
     target = today if choice.endswith("today") else today + timedelta(days=1)
     date_str = target.strftime("%Y-%m-%d")
-    await query.edit_message_text(text=f"Memproses prediksi untuk {date_str}...")
+
+    # Kirim pesan progress
+    await query.edit_message_text(f"Memproses prediksi untuk {date_str}...")
+
+    # Fetch data dan buat workbook
     fixtures = await fetch_fixtures(date_str)
-    fn, count = create_workbook(fixtures, filter_liga=not all_flag)
-    cap = f"Total prediksi: {count} pertandingan" if not all_flag else f"Total semua prediksi: {count} pertandingan"
-    await ctx.bot.send_document(chat_id=query.message.chat_id, document=open(fn, "rb"), caption=cap)
-    os.remove(fn)
+    fn, count = create_workbook(fixtures)
+
+    caption = f"Total prediksi: {count} pertandingan"
+
+    # Kirim file dan pastikan selalu dihapus
+    try:
+        with open(fn, "rb") as f:
+            await ctx.bot.send_document(
+                chat_id=update.effective_chat.id,
+                document=f,
+                caption=caption
+            )
+    finally:
+        if os.path.exists(fn):
+            os.remove(fn)
 
 bot_app.add_handler(CommandHandler("prediksi", cmd_prediksi))
 bot_app.add_handler(CommandHandler("semua", cmd_semua))
