@@ -80,7 +80,7 @@ bot_app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
 # Excel workbook creation
 def create_workbook(
     fixtures: List[Dict[str, Any]],
-    filter_liga: bool = False,
+    filter_liga: bool = True,
 ) -> (str, int):
     wb = Workbook()
     ws = wb.active
@@ -162,62 +162,40 @@ def create_workbook(
     return tmp.name, count
 
 # Fetch fixtures with prediction and error handling
-async def fetch_fixtures(date_str: str, filter_liga: bool = True) -> List[Dict[str, Any]]:
-    """
-    Ambil semua fixtures dari API Football untuk tanggal tertentu
-    - Paginate semua halaman
-    - (opsional) filter berdasarkan LIGA_FILTER
-    - Ambil prediksi untuk masing-masing fixture
-    """
-    fixtures: List[Dict[str, Any]] = []
-    page = 1
+async def fetch_fixtures(date_str: str) -> List[Dict[str, Any]]:
+    url = f"{BASE_URL}/fixtures"
+    params = {"date": date_str, "status": "NS", "timezone": tz_name}
 
     async with aiohttp.ClientSession(headers=HEADERS) as session:
-        # Pagination
-        while True:
-            params = {
-                "date": date_str,
-                "status": "NS",
-                "timezone": tz_name,
-                "page": page,
-            }
-            async with session.get(f"{BASE_URL}/fixtures", params=params) as resp:
+        try:
+            async with session.get(url, params=params) as resp:
                 data = await resp.json()
-                page_fixtures = data.get("response", [])
+                fixtures = data.get("response", [])
+                logger.info(f"Total fixtures fetched: {len(fixtures)}")
+        except Exception as e:
+            logger.error(f"Error fetching fixtures: {e}")
+            return []
 
-            logger.info(f"[Page {page}] Retrieved {len(page_fixtures)} fixtures")
-            if not page_fixtures:
-                break
+        # filter by league
+        #fixtures = [f for f in fixtures if f["league"]["id"] in LIGA_FILTER]
+        #logger.info(f"Fixtures after filter: {len(fixtures)}")
 
-            fixtures.extend(page_fixtures)
-            page += 1
-
-        logger.info(f"Total fixtures after pagination: {len(fixtures)}")
-
-        if filter_liga:
-            before = len(fixtures)
-            fixtures = [f for f in fixtures if f["league"]["id"] in LIGA_FILTER]
-            logger.info(f"After filter: {len(fixtures)} dari {before}")
-
-        # Prediksi paralel (dengan semaphore)
-        sem = asyncio.Semaphore(10)
-
+        sem = asyncio.Semaphore(10)  # limit parallel requests
         async def attach_prediction(fixture: Dict[str, Any]) -> Dict[str, Any]:
             async with sem:
+                fid = fixture["fixture"]["id"]
+                pred_url = f"{BASE_URL}/predictions"
                 try:
-                    fid = fixture["fixture"]["id"]
-                    async with session.get(f"{BASE_URL}/predictions", params={"fixture": fid}) as presp:
+                    async with session.get(pred_url, params={"fixture": fid}) as presp:
                         pdata = await presp.json()
                     fixture["prediction"] = pdata.get("response", [])
                 except Exception as e:
-                    logger.warning(f"Failed prediction for fixture {fid}: {e}")
+                    logger.warning(f"Failed prediction for {fid}: {e}")
                     fixture["prediction"] = []
             return fixture
 
-        tasks = [attach_prediction(f) for f in fixtures]
-        fixtures_with_predictions = await asyncio.gather(*tasks)
-        return fixtures_with_predictions
-
+        tasks = [asyncio.create_task(attach_prediction(f)) for f in fixtures]
+        return await asyncio.gather(*tasks)
 # Telegram handlers
 async def cmd_prediksi(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     kb = InlineKeyboardMarkup([
