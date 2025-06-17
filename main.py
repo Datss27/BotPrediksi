@@ -66,7 +66,7 @@ bot_app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
 # Excel workbook creation
 def create_workbook(
     fixtures: List[Dict[str, Any]],
-    filter_liga: bool = True,
+    filter_liga: bool = False,
 ) -> (str, int):
     wb = Workbook()
     ws = wb.active
@@ -148,23 +148,41 @@ def create_workbook(
     return tmp.name, count
 
 # Fetch fixtures with prediction and error handling
-async def fetch_fixtures(date_str: str) -> List[Dict[str, Any]]:
-    url = f"{BASE_URL}/fixtures"
-    params = {"date": date_str, "status": "NS", "timezone": tz_name}
+async def fetch_fixtures(date_str: str, filter_liga: bool = True) -> List[Dict[str, Any]]:
+    """
+    Fetch all fixtures for `date_str`, across semua page, lalu
+    (opsional) filter berdasarkan LIGA_FILTER.
+    """
+    fixtures: List[Dict[str, Any]] = []
+    page = 1
 
     async with aiohttp.ClientSession(headers=HEADERS) as session:
-        try:
-            async with session.get(url, params=params) as resp:
+        while True:
+            params = {
+                "date": date_str,
+                "status": "NS",           # tambahkan "TBD" atau lainnya jika perlu
+                "timezone": tz_name,
+                "page": page
+            }
+            async with session.get(f"{BASE_URL}/fixtures", params=params) as resp:
                 data = await resp.json()
-                fixtures = data.get("response", [])
-                logger.info(f"Total fixtures fetched: {len(fixtures)}")
-        except Exception as e:
-            logger.error(f"Error fetching fixtures: {e}")
-            return []
+                page_fixtures = data.get("response", [])
 
-        # filter by league
+            logger.info(f"[page {page}] Fetched {len(page_fixtures)} fixtures")
+            if not page_fixtures:
+                break
+
+            fixtures.extend(page_fixtures)
+            page += 1
+
+    logger.info(f"Total fixtures after pagination: {len(fixtures)}")
+
+    if filter_liga:
+        before = len(fixtures)
         fixtures = [f for f in fixtures if f["league"]["id"] in LIGA_FILTER]
-        logger.info(f"Fixtures after filter: {len(fixtures)}")
+        logger.info(f"After applying liga.json filter: {len(fixtures)} (dari {before})")
+
+    return fixtures
 
         sem = asyncio.Semaphore(10)  # limit parallel requests
         async def attach_prediction(fixture: Dict[str, Any]) -> Dict[str, Any]:
@@ -202,12 +220,17 @@ async def handle_prediksi(update: Update, ctx: ContextTypes.DEFAULT_TYPE, all_fl
     query = update.callback_query
     await query.answer()
     choice = query.data
+
     today = datetime.now(TZ)
     target = today if choice.endswith("today") else today + timedelta(days=1)
     date_str = target.strftime("%Y-%m-%d")
+
     await query.edit_message_text(text=f"Memproses prediksi untuk {date_str}...")
-    fixtures = await fetch_fixtures(date_str)
-    fn, count = create_workbook(fixtures, filter_liga=not all_flag)
+
+    # pass filter_liga = not all_flag
+    fixtures = await fetch_fixtures(date_str, filter_liga=not all_flag)
+
+    fn, count = create_workbook(fixtures, filter_liga=False)
     cap = f"Total prediksi: {count} pertandingan" if not all_flag else f"Total semua prediksi: {count} pertandingan"
     await ctx.bot.send_document(chat_id=query.message.chat_id, document=open(fn, "rb"), caption=cap)
     os.remove(fn)
