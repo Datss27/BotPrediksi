@@ -66,7 +66,7 @@ bot_app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
 # Excel workbook creation
 def create_workbook(
     fixtures: List[Dict[str, Any]],
-    filter_liga: bool = True,
+    filter_liga: bool = False,
 ) -> (str, int):
     wb = Workbook()
     ws = wb.active
