@@ -148,49 +148,50 @@ def create_workbook(
     return tmp.name, count
 
 # Fetch fixtures with prediction and error handling
-async def fetch_fixtures(date_str: str, filter_liga: bool = True) -> List[Dict[str, Any]]:
+async def fetch_fixtures(
+    date_str: str,
+    filter_liga: bool = True
+) -> List[Dict[str, Any]]:
     """
-    Fetch all fixtures for `date_str`, across semua page, lalu
-    (opsional) filter berdasarkan LIGA_FILTER.
+    1. Ambil semua fixtures untuk date_str (semua page)
+    2. (Opsional) filter berdasarkan LIGA_FILTER
+    3. Attach prediksi masing-masing fixture secara parallel
     """
     fixtures: List[Dict[str, Any]] = []
     page = 1
 
+    # 1 & 2: pagination + filter awal
     async with aiohttp.ClientSession(headers=HEADERS) as session:
         while True:
             params = {
                 "date": date_str,
-                "status": "NS",           # tambahkan "TBD" atau lainnya jika perlu
+                "status": "NS",      # bisa tambahkan "TBD"
                 "timezone": tz_name,
-                "page": page
+                "page": page,
             }
             async with session.get(f"{BASE_URL}/fixtures", params=params) as resp:
                 data = await resp.json()
                 page_fixtures = data.get("response", [])
-
-            logger.info(f"[page {page}] Fetched {len(page_fixtures)} fixtures")
+            logger.info(f"[page {page}] fetched {len(page_fixtures)} fixtures")
             if not page_fixtures:
                 break
-
             fixtures.extend(page_fixtures)
             page += 1
 
-    logger.info(f"Total fixtures after pagination: {len(fixtures)}")
+        logger.info(f"Total fixtures after pagination: {len(fixtures)}")
 
-    if filter_liga:
-        before = len(fixtures)
-        fixtures = [f for f in fixtures if f["league"]["id"] in LIGA_FILTER]
-        logger.info(f"After applying liga.json filter: {len(fixtures)} (dari {before})")
+        if filter_liga:
+            before = len(fixtures)
+            fixtures = [f for f in fixtures if f["league"]["id"] in LIGA_FILTER]
+            logger.info(f"After filter liga.json: {len(fixtures)} (dari {before})")
 
-    return fixtures
-
-    sem = asyncio.Semaphore(10)  # limit parallel requests
+        # 3: attach predictions
+        sem = asyncio.Semaphore(10)
         async def attach_prediction(fixture: Dict[str, Any]) -> Dict[str, Any]:
             async with sem:
                 fid = fixture["fixture"]["id"]
-                pred_url = f"{BASE_URL}/predictions"
                 try:
-                    async with session.get(pred_url, params={"fixture": fid}) as presp:
+                    async with session.get(f"{BASE_URL}/predictions", params={"fixture": fid}) as presp:
                         pdata = await presp.json()
                     fixture["prediction"] = pdata.get("response", [])
                 except Exception as e:
@@ -198,8 +199,9 @@ async def fetch_fixtures(date_str: str, filter_liga: bool = True) -> List[Dict[s
                     fixture["prediction"] = []
             return fixture
 
-        tasks = [asyncio.create_task(attach_prediction(f)) for f in fixtures]
-        return await asyncio.gather(*tasks)
+        tasks = [attach_prediction(f) for f in fixtures]
+        fixtures_with_pred = await asyncio.gather(*tasks)
+        return fixtures_with_pred
 
 # Telegram handlers
 async def cmd_prediksi(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
