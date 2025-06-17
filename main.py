@@ -173,17 +173,16 @@ async def fetch_fixtures(date_str: str) -> List[Dict[str, Any]]:
             logger.error(f"Error fetching fixtures: {e}")
             return []
 
-        # filter by league
+        # SELALU filter hanya liga di liga.json
         fixtures = [f for f in fixtures if f["league"]["id"] in LIGA_FILTER]
-        logger.info(f"Fixtures after filter: {len(fixtures)}")
+        logger.info(f"Fixtures after liga-filter: {len(fixtures)}")
 
-        sem = asyncio.Semaphore(10)  # limit parallel requests
+        sem = asyncio.Semaphore(10)
         async def attach_prediction(fixture: Dict[str, Any]) -> Dict[str, Any]:
             async with sem:
                 fid = fixture["fixture"]["id"]
-                pred_url = f"{BASE_URL}/predictions"
                 try:
-                    async with session.get(pred_url, params={"fixture": fid}) as presp:
+                    async with session.get(f"{BASE_URL}/predictions", params={"fixture": fid}) as presp:
                         pdata = await presp.json()
                     fixture["prediction"] = pdata.get("response", [])
                 except Exception as e:
@@ -193,6 +192,7 @@ async def fetch_fixtures(date_str: str) -> List[Dict[str, Any]]:
 
         tasks = [asyncio.create_task(attach_prediction(f)) for f in fixtures]
         return await asyncio.gather(*tasks)
+        
 # Telegram handlers
 async def cmd_prediksi(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     kb = InlineKeyboardMarkup([
@@ -205,22 +205,19 @@ async def handle_prediksi(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
 
-    # Tentukan tanggal target (hari ini atau besok)
-    choice = query.data
+    # Tentukan tanggal: today/besok
+    choice = query.data  # "pr_today" atau "pr_tomorrow"
     today = datetime.now(TZ)
     target = today if choice.endswith("today") else today + timedelta(days=1)
     date_str = target.strftime("%Y-%m-%d")
 
-    # Kirim pesan progress
     await query.edit_message_text(f"Memproses prediksi untuk {date_str}...")
 
-    # Fetch data dan buat workbook
     fixtures = await fetch_fixtures(date_str)
     fn, count = create_workbook(fixtures)
 
-    caption = f"Total prediksi: {count} pertandingan"
+    caption = f"Total prediksi: {count} pertandingan (liga terpilih)"
 
-    # Kirim file dan pastikan selalu dihapus
     try:
         with open(fn, "rb") as f:
             await ctx.bot.send_document(
@@ -234,8 +231,10 @@ async def handle_prediksi(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 bot_app.add_handler(CommandHandler("prediksi", cmd_prediksi))
 
-bot_app.add_handler(CallbackQueryHandler(lambda u, c: handle_prediksi(u, c, False), pattern="^pr_"))
-bot_app.add_handler(CallbackQueryHandler(lambda u, c: handle_prediksi(u, c, True), pattern="^allpr_"))
+bot_app.add_handler(CallbackQueryHandler(
+    handle_prediksi,
+    pattern="^pr_"
+))
 
 # FastAPI endpoints
 @app_web.get("/")
