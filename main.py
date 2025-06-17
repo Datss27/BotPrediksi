@@ -184,7 +184,7 @@ async def fetch_fixtures(date_str: str, filter_liga: bool = True) -> List[Dict[s
 
     return fixtures
 
-        sem = asyncio.Semaphore(10)  # limit parallel requests
+    sem = asyncio.Semaphore(10)  # limit parallel requests
         async def attach_prediction(fixture: Dict[str, Any]) -> Dict[str, Any]:
             async with sem:
                 fid = fixture["fixture"]["id"]
