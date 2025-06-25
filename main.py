@@ -22,7 +22,7 @@ from telegram.ext import (
 )
 import uvicorn
 from contextlib import asynccontextmanager
-from openpyxl.formatting.rule import FormulaRule,
+from openpyxl.formatting.rule import FormulaRule
 
 # --- Konfigurasi Logging ---
 logging.basicConfig(
