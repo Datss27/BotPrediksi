@@ -179,7 +179,6 @@ def create_workbook(fixtures: List[Dict[str, Any]]) -> Tuple[str, int]:
     date_str = datetime.now(TZ).strftime("%Y-%m-%d")
     ws.title = f"Prediksi {date_str}"
 
-    # flat headers dan grup
     flat = ["Negara", "Liga", "Home", "Away", "Tanggal", "Jam",
             "Prediksi", "Saran", "Prob Home", "Prob Draw", "Prob Away"]
     groups = [
@@ -189,7 +188,7 @@ def create_workbook(fixtures: List[Dict[str, Any]]) -> Tuple[str, int]:
         ("Perbandingan",["Home", "Away"]),
     ]
 
-    # baris 1: flat + nama grup (merge nanti)
+    # — Header baris 1 & 2 —
     col = 1
     for h in flat:
         ws.cell(row=1, column=col, value=h)
@@ -199,7 +198,6 @@ def create_workbook(fixtures: List[Dict[str, Any]]) -> Tuple[str, int]:
         ws.cell(row=1, column=col+1, value=None)
         col += 2
 
-    # baris 2: sub-header grup
     for i in range(1, len(flat)+1):
         ws.cell(row=2, column=i, value=None)
     col = len(flat) + 1
@@ -208,42 +206,41 @@ def create_workbook(fixtures: List[Dict[str, Any]]) -> Tuple[str, int]:
             ws.cell(row=2, column=col, value=sub)
             col += 1
 
-    # merge untuk flat headers (row1–2) dan grup headers (dua kolom di row1)
+    # — Merge cells untuk flat & grup headers —
     for c in range(1, len(flat)+1):
-        ws.merge_cells(start_row=1, start_column=c, end_row=2, end_column=c)
+        ws.merge_cells(start_row=1, start_column=c, end_row=2,   end_column=c)
     start = len(flat) + 1
     for _ in groups:
         ws.merge_cells(start_row=1, start_column=start, end_row=1, end_column=start+1)
         start += 2
 
-    # styling header
+    # — Style header —
     header_fill = PatternFill("solid", fgColor="FFD966")
     for row in (1, 2):
         for cell in ws[row]:
-            cell.font = Font(bold=True)
+            cell.font      = Font(bold=True)
             cell.alignment = Alignment(horizontal="center", vertical="center")
-            cell.fill = header_fill
+            cell.fill      = header_fill
 
-    # filter otomatis mencakup keduanya
+    # — Auto‐filter dua baris header —
     last_col = get_column_letter(len(flat) + 2*len(groups))
     ws.auto_filter.ref = f"A1:{last_col}2"
 
-    # tulis data mulai row 3
+    # — Tulis data baris 3 dst. —
     count = 0
     for f in fixtures:
         ws.append(_extract_row(f))
         count += 1
 
-    # conditional formatting pada kolom Perbandingan
+    # — Conditional formatting untuk Perbandingan —
     start_row = 3
-    end_row = 2 + count
-    # cari huruf kolom comp_home / comp_away
-    comp_home_idx = len(flat) + 1 + 2*3      # grup ke-4, subkolom pertama
+    end_row   = 2 + count
+    comp_home_idx = len(flat) + 1 + 2*3
     comp_away_idx = comp_home_idx + 1
     col_home = get_column_letter(comp_home_idx)
     col_away = get_column_letter(comp_away_idx)
 
-    # jika home > away → home biru
+    # Home > Away → Home biru
     ws.conditional_formatting.add(
         f"{col_home}{start_row}:{col_home}{end_row}",
         FormulaRule(
@@ -252,7 +249,7 @@ def create_workbook(fixtures: List[Dict[str, Any]]) -> Tuple[str, int]:
             fill=PatternFill("solid", fgColor="BDD7EE")
         )
     )
-    # jika home = away → kedua kolom kuning
+    # Home = Away → kedua kolom kuning
     ws.conditional_formatting.add(
         f"{col_home}{start_row}:{col_away}{end_row}",
         FormulaRule(
@@ -262,12 +259,15 @@ def create_workbook(fixtures: List[Dict[str, Any]]) -> Tuple[str, int]:
         )
     )
 
-    # auto–adjust lebar kolom
+    # — Auto‐adjust width (perbaikan) —
     for col_cells in ws.columns:
-        max_len = max((len(str(c.value)) if c.value is not None else 0) for c in col_cells)
-        ws.column_dimensions[col_cells[0].column_letter].width = max_len + 2
+        # ambil index kolom dari sel pertama, lalu ubah jadi huruf
+        idx        = col_cells[0].col_idx
+        col_letter = get_column_letter(idx)
+        max_len    = max((len(str(c.value)) if c.value is not None else 0) for c in col_cells)
+        ws.column_dimensions[col_letter].width = max_len + 2
 
-    # simpan ke file sementara
+    # — Simpan ke file sementara —
     tmp = tempfile.NamedTemporaryFile(prefix="prediksi_", suffix=".xlsx", delete=False)
     wb.save(tmp.name)
     logger.info("Workbook saved: %s with %d entries", tmp.name, count)
