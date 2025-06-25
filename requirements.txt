@@ -1,6 +1,7 @@
-python-telegram-bot[webhooks]~=20.6
-aiohttp
-openpyxl
-python-dateutil
-uvicorn
 fastapi
+python-telegram-bot[fastapi]==20.6
+uvicorn[standard]
+openpyxl
+aiohttp
+python-dotenv
+python-dateutil
