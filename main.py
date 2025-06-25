@@ -7,7 +7,7 @@ from telegram.ext import ApplicationBuilder
 from zoneinfo import ZoneInfo
 from contextlib import asynccontextmanager
 import uvicorn
-
+from telegram import Update
 from settings import settings
 from api_client import ApiSportsClient
 from handlers import init as init_handlers, register_handlers
@@ -54,7 +54,7 @@ def root():
 @app.post("/telegram")
 async def telegram_webhook(req: Request):
     data = await req.json()
-    update = bot.bot._update_queue._Update(bot.bot).de_json(data, bot.bot)
+    update = Update.de_json(data, bot.bot)
     await bot.update_queue.put(update)
     return {"ok": True}
 
