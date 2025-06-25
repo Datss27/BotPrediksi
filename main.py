@@ -56,7 +56,7 @@ async def telegram_webhook(req: Request):
     data = await req.json()
     update = bot.bot._update_queue._Update(bot.bot).de_json(data, bot.bot)
     await bot.update_queue.put(update)
-    return {"ok": True"}
+    return {"ok": True}
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=settings.port)
