@@ -30,7 +30,6 @@ async def prediksi_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     file_path, total = create_workbook(fixtures)
     caption = f"Total prediksi: {total} pertandingan"
     await ctx.bot.send_document(chat_id=update.effective_chat.id, document=file_path, filename="prediksi.xlsx", caption=caption)
-    os.remove(file_path)
 
 def register_handlers(app: Application):
     app.add_handler(CommandHandler("prediksi", prediksi_command))
