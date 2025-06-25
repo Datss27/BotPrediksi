@@ -34,7 +34,7 @@ def create_workbook(fixtures):
         "Perbandingan", None
     ]
 
-    subheaders = ["" for _ in range(12)] + ["Home", "Away"] * 4
+    subheaders = ["" for _ in range(11)] + ["Home", "Away"] * 4
 
     ws.append(headers)
     ws.append(subheaders)
