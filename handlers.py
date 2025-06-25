@@ -2,8 +2,8 @@ from datetime import datetime, timedelta
 from fastapi import APIRouter
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
-from .api_client import ApiSportsClient
-from .excel_utils import create_workbook
+from api_client import ApiSportsClient
+from excel_utils import create_workbook
 from settings import settings
 
 router = APIRouter()
