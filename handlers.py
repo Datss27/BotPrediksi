@@ -1,20 +1,17 @@
-from datetime import datetime, timedelta
-from fastapi import APIRouter
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import ContextTypes
-from api_client import ApiSportsClient
+from telegram.ext import ContextTypes, CommandHandler, CallbackQueryHandler, Application
+from datetime import datetime, timedelta
 from excel_utils import create_workbook
-from settings import settings
+import os
 
-router = APIRouter()
-api_client = ApiSportsClient()
+api_client = None
+TZ = None
 
-# muat filter liga dari file liga.json
-import json
-with open("liga.json", encoding="utf-8") as f:
-    LIGA_FILTER = {item["id"] for item in json.load(f)}
+def init(client, tz):
+    global api_client, TZ
+    api_client = client
+    TZ = tz
 
-@router.message_handler(commands=["prediksi"])
 async def prediksi_command(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("Hari Ini", callback_data="today")],
@@ -22,20 +19,20 @@ async def prediksi_command(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     ])
     await update.message.reply_text("Pilih tanggal prediksi:", reply_markup=kb)
 
-@router.callback_query_handler(lambda c: c.data in ("today","tomorrow"))
 async def prediksi_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     choice = update.callback_query.data
     await update.callback_query.answer()
-    target = datetime.now() + (timedelta(days=1) if choice=="tomorrow" else timedelta(0))
+    target = datetime.now(TZ) + timedelta(days=1 if choice == "tomorrow" else 0)
     date_str = target.strftime("%Y-%m-%d")
     await update.callback_query.edit_message_text(f"Memproses prediksi {date_str}...")
 
-    fixtures = await api_client.get_fixtures(date_str, list(LIGA_FILTER))
-    bio, total = create_workbook(fixtures)
+    fixtures = await api_client.get_fixtures(date_str)
+    file_path, total = create_workbook(fixtures)
+    caption = f"Total prediksi: {total} pertandingan"
+    with open(file_path, "rb") as file:
+        await ctx.bot.send_document(chat_id=update.effective_chat.id, document=file, caption=caption)
+    os.remove(file_path)
 
-    await ctx.bot.send_document(
-        chat_id=update.effective_chat.id,
-        document=bio,
-        filename=f"prediksi_{date_str}.xlsx",
-        caption=f"Total prediksi: {total} pertandingan"
-    )
+def register_handlers(app: Application):
+    app.add_handler(CommandHandler("prediksi", prediksi_command))
+    app.add_handler(CallbackQueryHandler(prediksi_callback, pattern="^(today|tomorrow)$"))
