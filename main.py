@@ -4,7 +4,7 @@ from fastapi import FastAPI, Request
 from telegram.ext import ApplicationBuilder
 from contextlib import asynccontextmanager
 from settings import settings
-from .handlers import router, api_client
+from handlers import router, api_client
 
 # logging minimal
 logging.basicConfig(level=logging.WARNING, format="%(asctime)s %(levelname)s %(message)s")
