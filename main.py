@@ -116,65 +116,41 @@ class ApiSportsClient:
 api_client = ApiSportsClient(Config.BASE_URL, HEADERS)
 
 # --- Excel Generator ---
-def create_workbook(fixtures: List[Dict[str, Any]]) -> Tuple[str, int]:
-    wb = Workbook()
-    ws = wb.active
-    date_str = datetime.now(TZ).strftime("%Y-%m-%d")
-    ws.title = f"Prediksi {date_str}"
-
-    headers = [
-        "Negara", "Liga", "Home", "Away", "Tanggal", "Jam", "Prediksi", "Saran",
-        "Prob Home", "Prob Draw", "Prob Away", "Form", "ATT", "DEF", "Perbandingan"
-    ]
-    ws.append(headers)
-
-    # style header
-    header_fill = PatternFill("solid", fgColor="FFD966")
-    for cell in ws[1]:
-        cell.font = Font(bold=True)
-        cell.alignment = Alignment(horizontal="center")
-        cell.fill = header_fill
-    ws.auto_filter.ref = f"A1:{get_column_letter(len(headers))}1"
-
-    count = 0
-    for f in fixtures:
-        row = _extract_row(f)
-        if row:
-            ws.append(row)
-            count += 1
-
-    # auto-adjust width
-    for col in ws.columns:
-        max_len = max(len(str(c.value)) for c in col if c.value)
-        ws.column_dimensions[col[0].column_letter].width = max_len + 2
-
-    tmp = tempfile.NamedTemporaryFile(prefix="prediksi_", suffix=".xlsx", delete=False)
-    wb.save(tmp.name)
-    logger.info("Workbook saved: %s with %d entries", tmp.name, count)
-    return tmp.name, count
-
-
 def _extract_row(f: Dict[str, Any]) -> List[Any]:
     # parse prediction data
     pred = f.get('prediction') or []
     if pred:
         p = pred[0]
         pr = p.get('predictions', {})
-        win = pr.get('winner', {}).get('name', '-')
-        advice = pr.get('advice', '-')
-        pct = pr.get('percent', {})
-        hp, dp, ap = pct.get('home'), pct.get('draw'), pct.get('away')
-        t = p.get('teams', {})
-        home, away = t.get('home', {}), t.get('away', {})
-        form = f"{home.get('last_5',{}).get('form','-')} - {away.get('last_5',{}).get('form','-')}"
-        att = f"{home.get('last_5',{}).get('att','-')} - {away.get('last_5',{}).get('att','-')}"
-        df = f"{home.get('last_5',{}).get('def','-')} - {away.get('last_5',{}).get('def','-')}"
-        comp = pr.get('comparison',{}).get('total',{})
-        comp_str = f"{comp.get('home','-')} - {comp.get('away','-')}"
-    else:
-        win = advice = hp = dp = ap = form = att = df = comp_str = '-'
+        win     = pr.get('winner', {}).get('name', '-')
+        advice  = pr.get('advice', '-')
+        pct     = pr.get('percent', {})
+        hp      = pct.get('home') or 0
+        dp      = pct.get('draw') or 0
+        ap      = pct.get('away') or 0
 
-    # date parsing
+        teams   = p.get('teams', {})
+        home    = teams.get('home', {})
+        away    = teams.get('away', {})
+
+        form_home = home.get('last_5', {}).get('form', '-')
+        form_away = away.get('last_5', {}).get('form', '-')
+        att_home  = home.get('last_5', {}).get('att', '-')
+        att_away  = away.get('last_5', {}).get('att', '-')
+        def_home  = home.get('last_5', {}).get('def', '-')
+        def_away  = away.get('last_5', {}).get('def', '-')
+
+        comp = pr.get('comparison', {}).get('total', {})
+        comp_home = comp.get('home') or 0
+        comp_away = comp.get('away') or 0
+
+    else:
+        win = advice = '-'
+        hp = dp = ap = 0
+        form_home = form_away = att_home = att_away = def_home = def_away = '-'
+        comp_home = comp_away = 0
+
+    # parse date & time
     dt = parser.isoparse(f['fixture']['date']).astimezone(TZ)
     date = dt.strftime("%d-%m-%Y")
     time = dt.strftime("%H:%M %Z")
@@ -184,9 +160,117 @@ def _extract_row(f: Dict[str, Any]) -> List[Any]:
         f['league']['name'],
         f['teams']['home']['name'],
         f['teams']['away']['name'],
-        date, time, win, advice, hp, dp, ap,
-        form, att, df, comp_str
+        date,
+        time,
+        win,
+        advice,
+        hp, dp, ap,
+        form_home, form_away,
+        att_home,  att_away,
+        def_home,  def_away,
+        comp_home, comp_away
     ]
+
+
+def create_workbook(fixtures: List[Dict[str, Any]]) -> Tuple[str, int]:
+    wb = Workbook()
+    ws = wb.active
+    date_str = datetime.now(TZ).strftime("%Y-%m-%d")
+    ws.title = f"Prediksi {date_str}"
+
+    # flat headers dan grup
+    flat = ["Negara", "Liga", "Home", "Away", "Tanggal", "Jam",
+            "Prediksi", "Saran", "Prob Home", "Prob Draw", "Prob Away"]
+    groups = [
+        ("Form",        ["Home", "Away"]),
+        ("ATT",         ["Home", "Away"]),
+        ("DEF",         ["Home", "Away"]),
+        ("Perbandingan",["Home", "Away"]),
+    ]
+
+    # baris 1: flat + nama grup (merge nanti)
+    col = 1
+    for h in flat:
+        ws.cell(row=1, column=col, value=h)
+        col += 1
+    for grp, _ in groups:
+        ws.cell(row=1, column=col,   value=grp)
+        ws.cell(row=1, column=col+1, value=None)
+        col += 2
+
+    # baris 2: sub-header grup
+    for i in range(1, len(flat)+1):
+        ws.cell(row=2, column=i, value=None)
+    col = len(flat) + 1
+    for _, subs in groups:
+        for sub in subs:
+            ws.cell(row=2, column=col, value=sub)
+            col += 1
+
+    # merge untuk flat headers (row1–2) dan grup headers (dua kolom di row1)
+    for c in range(1, len(flat)+1):
+        ws.merge_cells(start_row=1, start_column=c, end_row=2, end_column=c)
+    start = len(flat) + 1
+    for _ in groups:
+        ws.merge_cells(start_row=1, start_column=start, end_row=1, end_column=start+1)
+        start += 2
+
+    # styling header
+    header_fill = PatternFill("solid", fgColor="FFD966")
+    for row in (1, 2):
+        for cell in ws[row]:
+            cell.font = Font(bold=True)
+            cell.alignment = Alignment(horizontal="center", vertical="center")
+            cell.fill = header_fill
+
+    # filter otomatis mencakup keduanya
+    last_col = get_column_letter(len(flat) + 2*len(groups))
+    ws.auto_filter.ref = f"A1:{last_col}2"
+
+    # tulis data mulai row 3
+    count = 0
+    for f in fixtures:
+        ws.append(_extract_row(f))
+        count += 1
+
+    # conditional formatting pada kolom Perbandingan
+    start_row = 3
+    end_row = 2 + count
+    # cari huruf kolom comp_home / comp_away
+    comp_home_idx = len(flat) + 1 + 2*3      # grup ke-4, subkolom pertama
+    comp_away_idx = comp_home_idx + 1
+    col_home = get_column_letter(comp_home_idx)
+    col_away = get_column_letter(comp_away_idx)
+
+    # jika home > away → home biru
+    ws.conditional_formatting.add(
+        f"{col_home}{start_row}:{col_home}{end_row}",
+        FormulaRule(
+            formula=[f"{col_home}{start_row}>{col_away}{start_row}"],
+            stopIfTrue=True,
+            fill=PatternFill("solid", fgColor="BDD7EE")
+        )
+    )
+    # jika home = away → kedua kolom kuning
+    ws.conditional_formatting.add(
+        f"{col_home}{start_row}:{col_away}{end_row}",
+        FormulaRule(
+            formula=[f"{col_home}{start_row}={col_away}{start_row}"],
+            stopIfTrue=True,
+            fill=PatternFill("solid", fgColor="FFF2CC")
+        )
+    )
+
+    # auto–adjust lebar kolom
+    for col_cells in ws.columns:
+        max_len = max((len(str(c.value)) if c.value is not None else 0) for c in col_cells)
+        ws.column_dimensions[col_cells[0].column_letter].width = max_len + 2
+
+    # simpan ke file sementara
+    tmp = tempfile.NamedTemporaryFile(prefix="prediksi_", suffix=".xlsx", delete=False)
+    wb.save(tmp.name)
+    logger.info("Workbook saved: %s with %d entries", tmp.name, count)
+    return tmp.name, count
 
 # --- Handlers Bot Telegram ---
 async def prediksi_command(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
