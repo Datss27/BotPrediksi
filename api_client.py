@@ -1,8 +1,7 @@
 import asyncio
 import aiohttp
+from typing import List, Dict, Any
 import logging
-from typing import Dict, Any, List
-from settings import settings
 
 logger = logging.getLogger(__name__)
 
@@ -10,7 +9,7 @@ class ApiSportsClient:
     def __init__(self, base_url: str, headers: Dict[str, str]):
         self.base_url = base_url
         self.headers = headers
-        self.session = None  # Tidak langsung dibuat
+        self.session = None
         self.sem = asyncio.Semaphore(10)
 
     async def init_session(self):
@@ -32,10 +31,11 @@ class ApiSportsClient:
                 return await resp.json()
 
     async def get_fixtures(self, date: str) -> List[Dict[str, Any]]:
+        from main import LIGA_FILTER, TZ  # Hindari circular import
         data = await self.fetch_json("fixtures", {
             "date": date,
             "status": "NS",
-            "timezone": "Asia/Makassar"  # atau gunakan dari config
+            "timezone": str(TZ)
         })
         fixtures = data.get("response", [])
         filtered = [f for f in fixtures if f["league"]["id"] in LIGA_FILTER]
