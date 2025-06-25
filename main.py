@@ -14,12 +14,13 @@ bot_app = ApplicationBuilder().token(settings.telegram_token).build()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    await bot_app.initialize()
-    await bot_app.start()
-    await bot_app.bot.set_webhook(f"{settings.webhook_url}/telegram")
+    await bot.initialize()
+    await bot.start()
+    await api_client.init_session()  # ✅ Inisialisasi session setelah loop aktif
+    await bot.bot.set_webhook(f"{Config.WEBHOOK_URL}/telegram")
     yield
+    await bot.stop()
     await api_client.close()
-    await bot_app.stop()
 
 app.router.lifespan_context = lifespan
 
