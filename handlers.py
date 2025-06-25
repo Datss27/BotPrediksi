@@ -4,7 +4,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 from .api_client import ApiSportsClient
 from .excel_utils import create_workbook
-from .settings import settings
+from settings import settings
 
 router = APIRouter()
 api_client = ApiSportsClient()
