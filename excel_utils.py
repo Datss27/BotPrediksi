@@ -4,7 +4,7 @@ from zoneinfo import ZoneInfo
 from openpyxl import Workbook
 from openpyxl.styles import Font, Alignment, PatternFill
 from openpyxl.utils import get_column_letter
-from .settings import settings
+from settings import settings
 
 TZ = ZoneInfo(settings.timezone)
 
