@@ -103,9 +103,9 @@ def _extract_row(f):
         att_away = away.get('last_5', {}).get('att', '-')
         df = home.get('last_5', {}).get('def', '-')
         df_away = away.get('last_5', {}).get('def', '-')
-        comp = pr.get('comparison', {}).get('total', {})
-        comp_home = comp.get('home', '-')
-        comp_away = comp.get('away', '-')
+        comparison = pred[0].get("comparison", {}).get("total", {})
+        comp_home = comparison.get("home", "-")
+        comp_away = comparison.get("away", "-")
     else:
         win = advice = hp = dp = ap = form = form_away = att = att_away = df = df_away = comp_home = comp_away = '-'
 
