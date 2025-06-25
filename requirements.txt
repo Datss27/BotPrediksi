@@ -5,3 +5,4 @@ openpyxl
 aiohttp
 python-dotenv
 python-dateutil
+pydantic-settings>=2.0
