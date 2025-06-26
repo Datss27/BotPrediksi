@@ -52,7 +52,7 @@ def create_workbook(fixtures):
     ws.merge_cells('R1:S1')
 
     for col in range(1, 12):
-    ws.merge_cells(start_row=1, start_column=col, end_row=2, end_column=col)
+        ws.merge_cells(start_row=1, start_column=col, end_row=2, end_column=col)
     
     count = 0
     for f in fixtures:
