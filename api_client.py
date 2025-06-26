@@ -39,7 +39,7 @@ class ApiSportsClient:
         })
         fixtures = data.get("response", [])
         filtered = [f for f in fixtures if f["league"]["id"] in LIGA_FILTER]
-        logger.info("Fixtures fetched %d, after filter %d", date, len(fixtures), len(filtered))
+        logger.info("Fixtures fetched %d, after filter %d", len(fixtures), len(filtered))
         return await self._attach_predictions(filtered)
 
     async def _attach_predictions(self, fixtures: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
