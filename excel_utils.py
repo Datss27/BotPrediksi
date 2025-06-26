@@ -39,7 +39,7 @@ def create_workbook(fixtures):
             cell.fill = header_fill
 
     # Merge header kolom tunggal
-    for col in range(1, 10):
+    for col in range(1, 11):
         ws.merge_cells(start_row=1, start_column=col, end_row=2, end_column=col)
 
     # Merge header ganda
