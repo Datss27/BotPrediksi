@@ -35,7 +35,13 @@ def create_workbook(fixtures):
         "Perbandingan", "Perbandingan"
     ]
     
-    subheaders = [""] * 11 + ["Home", "Away"] * 4
+    subheaders = [
+    "", "", "", "", "", "", "", "", "", "", "",  # Kolom 1–11 (tanpa subheader)
+    "Home", "Away",  # Form
+    "Home", "Away",  # ATT
+    "Home", "Away",  # DEF
+    "Home", "Away"   # Perbandingan
+    ]
 
     ws.append(headers)
     ws.append(subheaders)
