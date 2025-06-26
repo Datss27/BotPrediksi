@@ -46,6 +46,14 @@ def create_workbook(fixtures):
             cell.alignment = Alignment(horizontal="center")
             cell.fill = header_fill
 
+    ws.merge_cells('L1:M1')
+    ws.merge_cells('N1:O1')
+    ws.merge_cells('P1:Q1')
+    ws.merge_cells('R1:S1')
+
+    for col in range(1, 12):
+    ws.merge_cells(start_row=1, start_column=col, end_row=2, end_column=col)
+    
     count = 0
     for f in fixtures:
         row = _extract_row(f)
