@@ -54,8 +54,14 @@ def create_workbook(fixtures):
     for col in range(1, 12):
         ws.merge_cells(start_row=1, start_column=col, end_row=2, end_column=col)
 
-    merge_pairs = [(12, 13), (14, 15), (16, 17), (18, 19)]
-    for start_col, end_col in merge_pairs:
+    merge_groups = {
+        "Form": (12, 13),
+        "ATT": (14, 15),
+        "DEF": (16, 17),
+        "Perbandingan": (18, 19)
+    }
+
+    for label, (start_col, end_col) in merge_groups.items():
         ws.merge_cells(start_row=1, start_column=start_col, end_row=1, end_column=end_col)
         
     count = 0
