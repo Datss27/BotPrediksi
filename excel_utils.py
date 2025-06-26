@@ -117,6 +117,6 @@ def _extract_row(f):
         form, form_away,
         att, att_away,
         df, df_away,
-        comp_home, comp_away
+        comp_home, comp_away,
         hth_home, hth_away
     ]
