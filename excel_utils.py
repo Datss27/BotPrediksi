@@ -8,16 +8,18 @@ from settings import settings
 
 TZ = ZoneInfo(settings.timezone)
 
-# Warna dasar
-COLOR_GREEN = "C6EFCE"
-COLOR_RED = "FFC7CE"
-COLOR_YELLOW = "FFEB9C"
+# Warna dasar (ARGB)
+COLOR_GREEN = "FFC6EFCE"   # hijau terang
+COLOR_RED   = "FFFFC7CE"   # merah terang
+COLOR_YELLOW= "FFFFEB9C"   # kuning
+WHITE_RGB   = "FFFFFF"
 
-# Utilitas blend warna
-def blend_color(base_hex, factor):
-    base = tuple(int(base_hex[i:i+2], 16) for i in (0, 2, 4))
-    result = tuple(int((1 - factor) * c + factor * 255) for c in base)
-    return ''.join(f"{v:02X}" for v in result)
+def blend_color(base_rgb: str, factor: float) -> str:
+    r, g, b = (int(base_rgb[i:i+2], 16) for i in (0,2,4))
+    nr = int(r   + (255 - r) * factor)
+    ng = int(g   + (255 - g) * factor)
+    nb = int(b   + (255 - b) * factor)
+    return f"FF{nr:02X}{ng:02X}{nb:02X}"
 
 def create_workbook(fixtures):
     wb = Workbook()
@@ -66,32 +68,43 @@ def create_workbook(fixtures):
     count = 0
     for f in fixtures:
         row = _extract_row(f)
-        if row:
-            ws.append(row)
-            count += 1
+        if not row:
+            continue
+        ws.append(row)
+        last = ws.max_row
 
-            # Pewarnaan cell Home vs Away
-            last_row = ws.max_row
-            compare_pairs = [(12, 13), (14, 15), (16, 17), (18, 19)]
-            for col_h, col_a in compare_pairs:
-                h_cell = ws.cell(row=last_row, column=col_h)
-                a_cell = ws.cell(row=last_row, column=col_a)
-                try:
-                    hv = float(h_cell.value)
-                    av = float(a_cell.value)
-                    diff = abs(hv - av)
-                    factor = min(diff / 0.5, 1.0)
+        # Pasangan kolom Home vs Away untuk Form, ATT, DEF, Comp
+        pairs = [(12,13), (14,15), (16,17), (18,19)]
+        for home_col, away_col in pairs:
+            h_cell = ws.cell(row=last, column=home_col)
+            a_cell = ws.cell(row=last, column=away_col)
+            try:
+                hv = float(h_cell.value)
+                av = float(a_cell.value)
+            except (TypeError, ValueError):
+                # Lewati jika bukan angka
+                continue
 
-                    if hv > av:
-                        h_cell.fill = PatternFill("solid", fgColor=blend_color(COLOR_GREEN, 1 - factor))
-                        a_cell.fill = PatternFill("solid", fgColor=blend_color("FFFFFF", factor))
-                    elif av > hv:
-                        a_cell.fill = PatternFill("solid", fgColor=blend_color(COLOR_RED, 1 - factor))
-                        h_cell.fill = PatternFill("solid", fgColor=blend_color("FFFFFF", factor))
-                    else:
-                        h_cell.fill = a_cell.fill = PatternFill("solid", fgColor=COLOR_YELLOW)
-                except Exception:
-                    continue
+            diff   = abs(hv - av)
+            factor = min(diff / 100, 1.0)
+            
+            if h_cell.value is None or a_cell.value is None:
+                continue
+
+            if hv > av:
+                # Home unggul: hijau → putih
+                color_h = blend_color(COLOR_GREEN[2:], factor)
+                color_a = f"FF{WHITE_RGB}"
+            elif av > hv:
+                # Away unggul: merah → putih
+                color_a = blend_color(COLOR_RED[2:], factor)
+                color_h = f"FF{WHITE_RGB}"
+            else:
+                # Seri: kuning solid
+                color_h = color_a = COLOR_YELLOW
+
+            h_cell.fill = PatternFill(fill_type="solid", fgColor=color_h)
+            a_cell.fill = PatternFill(fill_type="solid", fgColor=color_a)
 
     # Otomatis atur lebar kolom
     for i, col_cells in enumerate(ws.columns, 1):
