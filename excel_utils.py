@@ -25,22 +25,22 @@ def create_workbook(fixtures):
     date_str = datetime.now(TZ).strftime("%Y-%m-%d")
     ws.title = f"Prediksi {date_str}"
 
-    # Header dan Subheader
+    # Header dan subheader kolom
     headers = [
         "Negara", "Liga", "Home", "Away", "Tanggal", "Jam", "Prediksi", "Saran",
         "Prob Home", "Prob Draw", "Prob Away",
-        "Form", None,
-        "ATT", None,
-        "DEF", None,
-        "Perbandingan", None
+        "Form", "Form",
+        "ATT", "ATT",
+        "DEF", "DEF",
+        "Perbandingan", "Perbandingan"
     ]
+    
     subheaders = [""] * 11 + ["Home", "Away"] * 4
 
-    # Tambahkan ke worksheet
     ws.append(headers)
     ws.append(subheaders)
 
-    # Styling
+    # Styling header
     header_fill = PatternFill("solid", fgColor="FFFF00")
     for row in ws.iter_rows(min_row=1, max_row=2):
         for cell in row:
@@ -48,21 +48,16 @@ def create_workbook(fixtures):
             cell.alignment = Alignment(horizontal="center", vertical="center")
             cell.fill = header_fill
 
-    # Merge header kolom tunggal (tanpa subheader)
+    # Merge kolom 1-11 (tanpa subheader)
     for col in range(1, 12):
         ws.merge_cells(start_row=1, start_column=col, end_row=2, end_column=col)
 
-    # Merge header ganda (dengan subheader Home/Away)
-    merge_groups = {
-        "Form": (12, 13),
-        "ATT": (14, 15),
-        "DEF": (16, 17),
-        "Perbandingan": (18, 19)
-    }
-    for label, (start_col, end_col) in merge_groups.items():
+    # Merge header gabungan 2 kolom: Form, ATT, DEF, Perbandingan
+    merge_pairs = [(12, 13), (14, 15), (16, 17), (18, 19)]
+    for start_col, end_col in merge_pairs:
         ws.merge_cells(start_row=1, start_column=start_col, end_row=1, end_column=end_col)
 
-    # Tambahkan data dan warnai perbandingan
+    # Tambahkan data dan pewarnaan
     count = 0
     for f in fixtures:
         row = _extract_row(f)
@@ -70,7 +65,7 @@ def create_workbook(fixtures):
             ws.append(row)
             count += 1
 
-            # Pewarnaan cell Home vs Away
+            # Warna cell Home vs Away
             last_row = ws.max_row
             compare_pairs = [(12, 13), (14, 15), (16, 17), (18, 19)]
             for col_h, col_a in compare_pairs:
@@ -93,7 +88,7 @@ def create_workbook(fixtures):
                 except Exception:
                     continue
 
-    # Otomatis atur lebar kolom
+    # Atur lebar kolom otomatis
     for i, col_cells in enumerate(ws.columns, 1):
         col_letter = get_column_letter(i)
         max_len = max((len(str(c.value)) for c in col_cells if c.value), default=0)
