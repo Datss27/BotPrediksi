@@ -87,9 +87,6 @@ def create_workbook(fixtures):
 
             diff   = abs(hv - av)
             factor = min(diff / 100, 1.0)
-            
-            if h_cell.value is None or a_cell.value is None:
-                continue
 
             if hv > av:
                 # Home unggul: hijau → putih
