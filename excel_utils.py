@@ -25,6 +25,7 @@ def create_workbook(fixtures):
     date_str = datetime.now(TZ).strftime("%Y-%m-%d")
     ws.title = f"Prediksi {date_str}"
 
+    # Header dan Subheader
     headers = [
         "Negara", "Liga", "Home", "Away", "Tanggal", "Jam", "Prediksi", "Saran",
         "Prob Home", "Prob Draw", "Prob Away",
@@ -33,37 +34,35 @@ def create_workbook(fixtures):
         "DEF", None,
         "Perbandingan", None
     ]
-
     subheaders = [""] * 11 + ["Home", "Away"] * 4
 
+    # Tambahkan ke worksheet
     ws.append(headers)
     ws.append(subheaders)
 
+    # Styling
     header_fill = PatternFill("solid", fgColor="FFFF00")
     for row in ws.iter_rows(min_row=1, max_row=2):
         for cell in row:
             cell.font = Font(bold=True)
-            cell.alignment = Alignment(horizontal="center")
+            cell.alignment = Alignment(horizontal="center", vertical="center")
             cell.fill = header_fill
 
-    ws.merge_cells('L1:M1')
-    ws.merge_cells('N1:O1')
-    ws.merge_cells('P1:Q1')
-    ws.merge_cells('R1:S1')
-
+    # Merge header kolom tunggal (tanpa subheader)
     for col in range(1, 12):
         ws.merge_cells(start_row=1, start_column=col, end_row=2, end_column=col)
 
+    # Merge header ganda (dengan subheader Home/Away)
     merge_groups = {
         "Form": (12, 13),
         "ATT": (14, 15),
         "DEF": (16, 17),
         "Perbandingan": (18, 19)
     }
-
     for label, (start_col, end_col) in merge_groups.items():
         ws.merge_cells(start_row=1, start_column=start_col, end_row=1, end_column=end_col)
-        
+
+    # Tambahkan data dan warnai perbandingan
     count = 0
     for f in fixtures:
         row = _extract_row(f)
@@ -71,17 +70,18 @@ def create_workbook(fixtures):
             ws.append(row)
             count += 1
 
-            # warnai cell berdasarkan selisih home vs away
+            # Pewarnaan cell Home vs Away
             last_row = ws.max_row
             compare_pairs = [(12, 13), (14, 15), (16, 17), (18, 19)]
             for col_h, col_a in compare_pairs:
-                h_cell = ws.cell(row=last_row, column=col_h + 1)
-                a_cell = ws.cell(row=last_row, column=col_a + 1)
+                h_cell = ws.cell(row=last_row, column=col_h)
+                a_cell = ws.cell(row=last_row, column=col_a)
                 try:
                     hv = float(h_cell.value)
                     av = float(a_cell.value)
                     diff = abs(hv - av)
                     factor = min(diff / 0.5, 1.0)
+
                     if hv > av:
                         h_cell.fill = PatternFill("solid", fgColor=blend_color(COLOR_GREEN, 1 - factor))
                         a_cell.fill = PatternFill("solid", fgColor=blend_color("FFFFFF", factor))
@@ -90,14 +90,16 @@ def create_workbook(fixtures):
                         h_cell.fill = PatternFill("solid", fgColor=blend_color("FFFFFF", factor))
                     else:
                         h_cell.fill = a_cell.fill = PatternFill("solid", fgColor=COLOR_YELLOW)
-                except:
+                except Exception:
                     continue
 
+    # Otomatis atur lebar kolom
     for i, col_cells in enumerate(ws.columns, 1):
         col_letter = get_column_letter(i)
         max_len = max((len(str(c.value)) for c in col_cells if c.value), default=0)
         ws.column_dimensions[col_letter].width = max_len + 2
 
+    # Simpan ke BytesIO
     bio = BytesIO()
     wb.save(bio)
     bio.seek(0)
