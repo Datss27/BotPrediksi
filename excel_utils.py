@@ -19,36 +19,50 @@ def blend_color(base_hex, factor):
     result = tuple(int((1 - factor) * c + factor * 255) for c in base)
     return ''.join(f"{v:02X}" for v in result)
 
-headers = [
+def create_workbook(fixtures):
+    wb = Workbook()
+    ws = wb.active
+    date_str = datetime.now(TZ).strftime("%Y-%m-%d")
+    ws.title = f"Prediksi {date_str}"
+
+    # Header dan Subheader
+    headers = [
         "Negara", "Liga", "Home", "Away", "Tanggal", "Jam", "Prediksi", "Saran",
         "Prob Home", "Prob Draw", "Prob Away",
         "Form", None,
         "ATT", None,
         "DEF", None,
-        "Perbandingan", None
+        "Comp", None
     ]
+    subheaders = [""] * 11 + ["Home", "Away"] * 4
 
-    subheaders = [
-        "", "", "", "", "", "", "", "", "", "", "",  # kolom 1–11
-        "Home", "Away",                              # Form
-        "Home", "Away",                              # ATT
-        "Home", "Away",                              # DEF
-        "Home", "Away"                               # Perbandingan
-    ]
-
+    # Tambahkan ke worksheet
     ws.append(headers)
     ws.append(subheaders)
 
-    # Merge kolom 1–11 (tanpa subheader)
+    # Styling
+    header_fill = PatternFill("solid", fgColor="FFFF00")
+    for row in ws.iter_rows(min_row=1, max_row=2):
+        for cell in row:
+            cell.font = Font(bold=True)
+            cell.alignment = Alignment(horizontal="center", vertical="center")
+            cell.fill = header_fill
+
+    # Merge header kolom tunggal (tanpa subheader)
     for col in range(1, 12):
         ws.merge_cells(start_row=1, start_column=col, end_row=2, end_column=col)
 
-    # Merge horizontal kolom 12–13, 14–15, dst
-    merge_pairs = [(12, 13), (14, 15), (16, 17), (18, 19)]
-    for start_col, end_col in merge_pairs:
+    # Merge header ganda (dengan subheader Home/Away)
+    merge_groups = {
+        "Form": (12, 13),
+        "ATT": (14, 15),
+        "DEF": (16, 17),
+        "Comp": (18, 19)
+    }
+    for label, (start_col, end_col) in merge_groups.items():
         ws.merge_cells(start_row=1, start_column=start_col, end_row=1, end_column=end_col)
 
-    # Tambahkan data dan pewarnaan
+    # Tambahkan data dan warnai Comp
     count = 0
     for f in fixtures:
         row = _extract_row(f)
@@ -56,7 +70,7 @@ headers = [
             ws.append(row)
             count += 1
 
-            # Warna cell Home vs Away
+            # Pewarnaan cell Home vs Away
             last_row = ws.max_row
             compare_pairs = [(12, 13), (14, 15), (16, 17), (18, 19)]
             for col_h, col_a in compare_pairs:
@@ -79,7 +93,7 @@ headers = [
                 except Exception:
                     continue
 
-    # Atur lebar kolom otomatis
+    # Otomatis atur lebar kolom
     for i, col_cells in enumerate(ws.columns, 1):
         col_letter = get_column_letter(i)
         max_len = max((len(str(c.value)) for c in col_cells if c.value), default=0)
