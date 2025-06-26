@@ -19,46 +19,31 @@ def blend_color(base_hex, factor):
     result = tuple(int((1 - factor) * c + factor * 255) for c in base)
     return ''.join(f"{v:02X}" for v in result)
 
-def create_workbook(fixtures):
-    wb = Workbook()
-    ws = wb.active
-    date_str = datetime.now(TZ).strftime("%Y-%m-%d")
-    ws.title = f"Prediksi {date_str}"
-
-    # Header dan subheader kolom
-    headers = [
+headers = [
         "Negara", "Liga", "Home", "Away", "Tanggal", "Jam", "Prediksi", "Saran",
         "Prob Home", "Prob Draw", "Prob Away",
-        "Form", "Form",
-        "ATT", "ATT",
-        "DEF", "DEF",
-        "Perbandingan", "Perbandingan"
+        "Form", None,
+        "ATT", None,
+        "DEF", None,
+        "Perbandingan", None
     ]
-    
+
     subheaders = [
-    "", "", "", "", "", "", "", "", "", "", "",  # Kolom 1–11 (tanpa subheader)
-    "Home", "Away",  # Form
-    "Home", "Away",  # ATT
-    "Home", "Away",  # DEF
-    "Home", "Away"   # Perbandingan
+        "", "", "", "", "", "", "", "", "", "", "",  # kolom 1–11
+        "Home", "Away",                              # Form
+        "Home", "Away",                              # ATT
+        "Home", "Away",                              # DEF
+        "Home", "Away"                               # Perbandingan
     ]
 
     ws.append(headers)
     ws.append(subheaders)
 
-    # Styling header
-    header_fill = PatternFill("solid", fgColor="FFFF00")
-    for row in ws.iter_rows(min_row=1, max_row=2):
-        for cell in row:
-            cell.font = Font(bold=True)
-            cell.alignment = Alignment(horizontal="center", vertical="center")
-            cell.fill = header_fill
-
-    # Merge kolom 1-11 (tanpa subheader)
+    # Merge kolom 1–11 (tanpa subheader)
     for col in range(1, 12):
         ws.merge_cells(start_row=1, start_column=col, end_row=2, end_column=col)
 
-    # Merge header gabungan 2 kolom: Form, ATT, DEF, Perbandingan
+    # Merge horizontal kolom 12–13, 14–15, dst
     merge_pairs = [(12, 13), (14, 15), (16, 17), (18, 19)]
     for start_col, end_col in merge_pairs:
         ws.merge_cells(start_row=1, start_column=start_col, end_row=1, end_column=end_col)
