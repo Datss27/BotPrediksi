@@ -21,7 +21,7 @@ def create_workbook(fixtures):
         "Form", None,
         "ATT", None,
         "DEF", None,
-        "Comp", None
+        "Comp", None,
         "H2H", None
     ]
     subheaders = [""] * 10 + ["Home", "Away"] * 5
