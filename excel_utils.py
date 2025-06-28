@@ -5,8 +5,6 @@ from openpyxl import Workbook
 from openpyxl.styles import Font, Alignment, PatternFill
 from openpyxl.utils import get_column_letter
 from settings import settings
-from openpyxl.formatting.rule import ColorScaleRule, FormulaRule
-from openpyxl.styles import PatternFill
 
 TZ = ZoneInfo(settings.timezone)
 
@@ -17,7 +15,18 @@ def _parse_percent(value):
         except ValueError:
             return "-"
     return value if isinstance(value, (int, float)) else "-"
-    
+
+def blend_color(hex_color, factor):
+    """Campur warna berdasarkan faktor jarak."""
+    r = int(hex_color[0:2], 16)
+    g = int(hex_color[2:4], 16)
+    b = int(hex_color[4:6], 16)
+    white = 255
+    new_r = int((1 - factor) * white + factor * r)
+    new_g = int((1 - factor) * white + factor * g)
+    new_b = int((1 - factor) * white + factor * b)
+    return f"{new_r:02X}{new_g:02X}{new_b:02X}"
+
 def create_workbook(fixtures):
     wb = Workbook()
     ws = wb.active
@@ -69,33 +78,33 @@ def create_workbook(fixtures):
         ws.append(row)
         written_matches += 1
 
-    # ⏬ Tambahkan setelah semua data ditulis
+    # Terapkan gradasi warna ke kolom perbandingan
+    for row_idx in range(3, ws.max_row + 1):
+        for (h_col, a_col) in [(11, 12), (13, 14), (15, 16), (17, 18), (19, 20)]:
+            h_cell = ws.cell(row=row_idx, column=h_col)
+            a_cell = ws.cell(row=row_idx, column=a_col)
+            try:
+                hv = float(h_cell.value)
+                av = float(a_cell.value)
+            except (ValueError, TypeError):
+                continue
 
-    # 1. Gradient formatting (kolom 11–20)
-    gradient_columns = range(11, 21)
-    color_rule = ColorScaleRule(
-        start_type='min', start_color='F8696B',
-        mid_type='percentile', mid_value=50, mid_color='FFEB84',
-        end_type='max', end_color='63BE7B'
-    )
-    for col_idx in gradient_columns:
-        col_letter = get_column_letter(col_idx)
-        ws.conditional_formatting.add(
-            f"{col_letter}3:{col_letter}{ws.max_row}",
-            color_rule
-        )
+            max_val = max(hv, av)
+            diff = abs(hv - av)
+            factor = diff / max_val if max_val != 0 else 0
 
-    # 2. Biru jika nilai sama
-    blue_fill = PatternFill(start_color="ADD8E6", end_color="ADD8E6", fill_type="solid")
-    pairs = [(11, 12), (13, 14), (15, 16), (17, 18), (19, 20)]
-    for col_home, col_away in pairs:
-        h = get_column_letter(col_home)
-        a = get_column_letter(col_away)
-        formula = f"${h}3=${a}3"
-        ws.conditional_formatting.add(f"{h}3:{h}{ws.max_row}", FormulaRule(formula=[formula], fill=blue_fill))
-        ws.conditional_formatting.add(f"{a}3:{a}{ws.max_row}", FormulaRule(formula=[formula], fill=blue_fill))
+            if hv > av:
+                color_h = blend_color(COLOR_GREEN[2:], factor)
+                color_a = f"FF{WHITE_RGB}"
+            elif av > hv:
+                color_a = blend_color(COLOR_RED[2:], factor)
+                color_h = f"FF{WHITE_RGB}"
+            else:
+                color_h = color_a = COLOR_YELLOW
 
-    # Auto width
+            h_cell.fill = PatternFill("solid", fgColor=color_h)
+            a_cell.fill = PatternFill("solid", fgColor=color_a)
+
     for i, col_cells in enumerate(ws.columns, 1):
         col_letter = get_column_letter(i)
         max_len = max((len(str(c.value)) for c in col_cells if c.value), default=0)
