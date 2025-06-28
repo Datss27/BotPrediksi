@@ -8,6 +8,11 @@ from settings import settings
 
 TZ = ZoneInfo(settings.timezone)
 
+COLOR_GREEN = "FF63BE7B"
+COLOR_RED = "FFF8696B"
+COLOR_YELLOW = "FFADD8E6"
+WHITE_RGB = "FFFFFF"
+
 def _parse_percent(value):
     if isinstance(value, str) and "%" in value:
         try:
