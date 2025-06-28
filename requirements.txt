@@ -6,3 +6,4 @@ aiohttp
 python-dotenv
 python-dateutil
 pydantic-settings>=2.0
+cachetools==5.3.3
