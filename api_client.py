@@ -2,6 +2,7 @@ import asyncio
 import aiohttp
 from typing import List, Dict, Any
 import logging
+from cachetools import TTLCache
 
 logger = logging.getLogger(__name__)
 
@@ -11,7 +12,9 @@ class ApiSportsClient:
         self.headers = headers
         self.session = None
         self.sem = asyncio.Semaphore(10)
-
+        self.fixtures_cache = TTLCache(maxsize=1000, ttl=21600)
+        self.fixture_prediction_cache = TTLCache(maxsize=500, ttl=3600)
+        
     async def init_session(self):
         if self.session is None or self.session.closed:
             self.session = aiohttp.ClientSession(headers=self.headers)
@@ -31,7 +34,14 @@ class ApiSportsClient:
                 return await resp.json()
 
     async def get_fixtures(self, date: str) -> List[Dict[str, Any]]:
-        from main import LIGA_FILTER, TZ  # Hindari circular import
+        from main import LIGA_FILTER, TZ
+
+        # Cek apakah sudah ada di cache
+        if date in self.fixtures_cache:
+            logger.info("Returning cached fixtures for %s", date)
+            return self.fixtures_cache[date]
+
+        # Ambil dari API jika belum ada
         data = await self.fetch_json("fixtures", {
             "date": date,
             "status": "NS",
@@ -40,7 +50,11 @@ class ApiSportsClient:
         fixtures = data.get("response", [])
         filtered = [f for f in fixtures if f["league"]["id"] in LIGA_FILTER]
         logger.info("Fixtures fetched %d, after filter %d", len(fixtures), len(filtered))
-        return await self._attach_predictions(filtered)
+
+        result = await self._attach_predictions(filtered)
+        self.fixtures_cache[date] = result  # Simpan ke cache
+
+        return result
 
     async def _attach_predictions(self, fixtures: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         tasks = [self._attach(f) for f in fixtures]
@@ -48,10 +62,24 @@ class ApiSportsClient:
 
     async def _attach(self, fixture: Dict[str, Any]) -> Dict[str, Any]:
         fid = fixture['fixture']['id']
+        
+        # Cek apakah prediksi untuk fixture ini sudah ada di cache
+        if fid in self.fixture_prediction_cache:
+            fixture['prediction'] = self.fixture_prediction_cache[fid]
+            return fixture
+
         try:
+            # Panggil API untuk ambil prediksi
             data = await self.fetch_json("predictions", {"fixture": fid})
-            fixture['prediction'] = data.get('response', [])
+            response = data.get('response', [])
+
+            # Simpan hasil ke dalam fixture dan cache
+            fixture['prediction'] = response        
+            if response:
+                self.fixture_prediction_cache[fid] = response
+
         except Exception as e:
             logger.warning("Failed prediction for %s: %s", fid, e)
             fixture['prediction'] = []
+
         return fixture
