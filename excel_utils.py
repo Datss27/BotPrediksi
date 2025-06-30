@@ -140,7 +140,7 @@ def create_workbook(fixtures):
     for i, col_cells in enumerate(ws.columns, 1):
         col_letter = get_column_letter(i)
         max_len = max((len(str(c.value)) for c in col_cells if c.value), default=0)
-        ws.column_dimensions[col_letter].width = max_len + 2
+        ws.column_dimensions[col_letter].width = max_len + 3
 
     bio = BytesIO()
     wb.save(bio)
