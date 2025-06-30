@@ -39,12 +39,25 @@ def safe_int(value):
         return 0
 
 def calculate_performance(wins, draws, played):
+    """
+    Hitung performa dalam persen (float), diproses melalui _parse_percent.
+    Contoh hasil akhir: 76.92
+    """
+    try:
+        wins = int(wins)
+        draws = int(draws)
+        played = int(played)
+    except (ValueError, TypeError):
+        return _parse_percent("0.00%")
+
     if played == 0:
-        return "0.00%"
+        return _parse_percent("0.00%")
+
     max_points = played * 3
     actual_points = (wins * 3) + (draws * 1)
     percent = (actual_points / max_points) * 100
-    return f"{percent:.2f}%"
+    percent_str = f"{percent:.2f}%"
+    return _parse_percent(percent_str)
 
 def create_workbook(fixtures):
     wb = Workbook()
