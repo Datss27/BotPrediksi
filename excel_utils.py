@@ -99,7 +99,7 @@ def create_workbook(fixtures):
 
     # Terapkan gradasi warna ke kolom perbandingan
     for row_idx in range(3, ws.max_row + 1):
-        for (h_col, a_col) in [(11, 12), (13, 14), (15, 16), (17, 18), (19, 20)]:
+        for (h_col, a_col) in [(9, 10),(11, 12), (13, 14), (15, 16), (17, 18), (19, 20)]:
             h_cell = ws.cell(row=row_idx, column=h_col)
             a_cell = ws.cell(row=row_idx, column=a_col)
             try:
