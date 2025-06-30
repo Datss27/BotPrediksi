@@ -40,10 +40,11 @@ def safe_int(value):
 
 def calculate_performance(wins, draws, played):
     if played == 0:
-        return 0.0  # Hindari divide by zero
+        return "0.00%"
     max_points = played * 3
     actual_points = (wins * 3) + (draws * 1)
-    return round(actual_points / max_points, 3)
+    percent = (actual_points / max_points) * 100
+    return f"{percent:.2f}%"
 
 def create_workbook(fixtures):
     wb = Workbook()
@@ -54,7 +55,7 @@ def create_workbook(fixtures):
     headers = [
         "Negara", "Liga", "Home", "Away", "Tanggal", "Jam", "Saran",
         "Probabilitas (H/D/A)",
-        "History", None,
+        "Performance", None,
         "Form", None,
         "ATT", None,
         "DEF", None,
