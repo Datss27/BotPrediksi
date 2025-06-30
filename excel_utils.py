@@ -32,6 +32,19 @@ def blend_color(hex_color, factor):
     new_b = int((1 - factor) * white + factor * b)
     return f"{new_r:02X}{new_g:02X}{new_b:02X}"
 
+def safe_int(value):
+    try:
+        return int(value)
+    except:
+        return 0
+
+def calculate_performance(wins, draws, played):
+    if played == 0:
+        return 0.0  # Hindari divide by zero
+    max_points = played * 3
+    actual_points = (wins * 3) + (draws * 1)
+    return round(actual_points / max_points, 3)
+
 def create_workbook(fixtures):
     wb = Workbook()
     ws = wb.active
@@ -65,7 +78,7 @@ def create_workbook(fixtures):
         ws.merge_cells(start_row=1, start_column=col, end_row=2, end_column=col)
 
     merge_groups = {
-        "History": (9, 10),
+        "Performance": (9, 10),
         "Form": (11, 12),
         "ATT": (13, 14),
         "DEF": (15, 16),
@@ -135,17 +148,23 @@ def _extract_row(f):
     prob_summary = f"{hp} / {dp} / {ap}"
     t = p.get('teams', {})
     home, away = t.get('home', {}), t.get('away', {})
-    home_stats, away_stats = home.get("league", {}).get("fixtures", {}), away.get("league", {}).get("fixtures", {})
-    h_played = home_stats.get("played", {}).get("total", "-")
-    h_wins = home_stats.get("wins", {}).get("total", "-")
-    h_draws = home_stats.get("draws", {}).get("total", "-")
-    h_loses = home_stats.get("loses", {}).get("total", "-")
-    a_played = away_stats.get("played", {}).get("total", "-")
-    a_wins = away_stats.get("wins", {}).get("total", "-")
-    a_draws = away_stats.get("draws", {}).get("total", "-")
-    a_loses = away_stats.get("loses", {}).get("total", "-")
-    home_sum = f"{h_played} : {h_wins} / {h_draws} / {h_loses}"
-    away_sum = f"{a_played} : {a_wins} / {a_draws} / {a_loses}"
+    # Ambil statistik home dan away
+    home_stats = home.get("league", {}).get("fixtures", {})
+    away_stats = away.get("league", {}).get("fixtures", {})
+
+    # Home team
+    h_played = safe_int(home_stats.get("played", {}).get("total", "-"))
+    h_wins = safe_int(home_stats.get("wins", {}).get("total", "-"))
+    h_draws = safe_int(home_stats.get("draws", {}).get("total", "-"))
+    h_loses = safe_int(home_stats.get("loses", {}).get("total", "-"))
+
+    # Away team
+    a_played = safe_int(away_stats.get("played", {}).get("total", "-"))
+    a_wins = safe_int(away_stats.get("wins", {}).get("total", "-"))
+    a_draws = safe_int(away_stats.get("draws", {}).get("total", "-"))
+    a_loses = safe_int(away_stats.get("loses", {}).get("total", "-"))
+    home_sum = calculate_performance(h_wins, h_draws, h_played)
+    away_sum = calculate_performance(a_wins, a_draws, a_played)
     form = _parse_percent(home.get('last_5', {}).get('form'))
     form_away = _parse_percent(away.get('last_5', {}).get('form'))
     att = _parse_percent(home.get('last_5', {}).get('att'))
