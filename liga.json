@@ -30,5 +30,6 @@
   { "id": 307, "nama": "Pro League", "negara": "Saudi Arabia", "kode": "KSA" },
   { "id": 345, "nama": "Czech Liga", "negara": "Czech Republic", "kode": "CZE" },
   { "id": 357, "nama": "Premier Division", "negara": "Ireland", "kode": "IRL" },
-  { "id": 15, "nama": "FIFA Club World Cup", "negara": "World", "kode": "FCWC" }
+  { "id": 15, "nama": "FIFA Club World Cup", "negara": "World", "kode": "FCWC" },
+  { "id": 365, "nama": "Virsliga", "negara": "Latvia", "kode": "LAT" }
 ]
