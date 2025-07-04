@@ -14,11 +14,11 @@
   { "id": 135, "nama": "Serie A", "negara": "Italy", "kode": "ITA" },
   { "id": 140, "nama": "La Liga", "negara": "Spain", "kode": "ESP" },
   { "id": 144, "nama": "Jupiler Pro League", "negara": "Belgium", "kode": "BEL" },
-  { "id": 169, "nama": "Super League", "negara": "China", "kode": "CHN" },
+  { "id": 169, "nama": "Super League (China)", "negara": "China", "kode": "CHN" },
   { "id": 179, "nama": "Premiership", "negara": "Scotland", "kode": "SCO" },
   { "id": 188, "nama": "A-League", "negara": "Australia", "kode": "AUS" },
   { "id": 197, "nama": "Super League 1", "negara": "Greece", "kode": "GRE" },
-  { "id": 207, "nama": "Super League", "negara": "Switzerland", "kode": "SUI" },
+  { "id": 207, "nama": "Super League (Swiss)", "negara": "Switzerland", "kode": "SUI" },
   { "id": 218, "nama": "Bundesliga", "negara": "Austria", "kode": "AUT" },
   { "id": 235, "nama": "Premier League", "negara": "Russia", "kode": "RUS" },
   { "id": 242, "nama": "Liga Pro", "negara": "Ecuador", "kode": "ECU" },
@@ -31,5 +31,10 @@
   { "id": 345, "nama": "Czech Liga", "negara": "Czech Republic", "kode": "CZE" },
   { "id": 357, "nama": "Premier Division", "negara": "Ireland", "kode": "IRL" },
   { "id": 15, "nama": "FIFA Club World Cup", "negara": "World", "kode": "FCWC" },
-  { "id": 365, "nama": "Virsliga", "negara": "Latvia", "kode": "LAT" }
+  { "id": 365, "nama": "Virsliga", "negara": "Latvia", "kode": "LAT" },
+  { "id": 250, "nama": "Division Profesional - Apertura", "negara": "Paraguay", "kode": "PAR" },
+  { "id": 281, "nama": "Primera División (Peru)", "negara": "Peru", "kode": "PER" },
+  { "id": 369, "nama": "Super League", "negara": "Uzbekistan", "kode": "UBK" },
+  { "id": 388, "nama": "1. Division", "negara": "Kazakhstan", "kode": "KZN" },
+  { "id": 299, "nama": "Primera División", "negara": "Venezuela", "kode": "VNZ" }
 ]
