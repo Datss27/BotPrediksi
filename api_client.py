@@ -38,8 +38,7 @@ class ApiSportsClient:
 
         # Cek cache
         if date in self.fixtures_cache:
-        logger.info("Returning cached fixtures for %s", date)
-        return self.fixtures_cache[date]
+            return self.fixtures_cache[date]
 
         all_fixtures = []
         limit = 50
