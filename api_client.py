@@ -36,46 +36,46 @@ class ApiSportsClient:
 
     async def get_fixtures(self, date: str) -> List[Dict[str, Any]]:
 
-    # Cek cache
-    if date in self.fixtures_cache:
+        # Cek cache
+        if date in self.fixtures_cache:
         logger.info("Returning cached fixtures for %s", date)
         return self.fixtures_cache[date]
 
-    all_fixtures = []
-    limit = 50
-    offset = 0
-    tz = TZ.zone if hasattr(TZ, 'zone') else str(TZ)
+        all_fixtures = []
+        limit = 50
+        offset = 0
+        tz = TZ.zone if hasattr(TZ, 'zone') else str(TZ)
 
-    while True:
-        params = {
-            "date": date,
-            "status": "NS",
-            "timezone": tz,
-            "limit": limit,
-            "offset": offset
-        }
-        data = await self.fetch_json("fixtures", params)
-        resp = data.get("response", [])
-        paging = data.get("paging", {})
-        all_fixtures.extend(resp)
+        while True:
+            params = {
+                "date": date,
+                "status": "NS",
+                "timezone": tz,
+                "limit": limit,
+                "offset": offset
+            }
+            data = await self.fetch_json("fixtures", params)
+            resp = data.get("response", [])
+            paging = data.get("paging", {})
+            all_fixtures.extend(resp)
 
-        total = paging.get("total", 0)
-        logger.debug("Offset %d: fetched %d/%d", offset, len(all_fixtures), total)
+            total = paging.get("total", 0)
+            logger.debug("Offset %d: fetched %d/%d", offset, len(all_fixtures), total)
 
-        if len(all_fixtures) >= total or not resp:
-            break
-        offset += limit
+            if len(all_fixtures) >= total or not resp:
+                break
+            offset += limit
 
-    logger.info("Total NS fixtures fetched: %d", len(all_fixtures))
+        logger.info("Total NS fixtures fetched: %d", len(all_fixtures))
 
-    # Filter berdasarkan liga
-    filtered = [f for f in all_fixtures if f["league"]["id"] in LIGA_FILTER]
-    logger.info("Fixtures after filtering: %d", len(filtered))
+        # Filter berdasarkan liga
+        filtered = [f for f in all_fixtures if f["league"]["id"] in LIGA_FILTER]
+        logger.info("Fixtures after filtering: %d", len(filtered))
 
-    # Tambahkan prediksi
-    result = await self._attach_predictions(filtered)
-    self.fixtures_cache[date] = result
-    return result
+        # Tambahkan prediksi
+        result = await self._attach_predictions(filtered)
+        self.fixtures_cache[date] = result
+        return result
 
     async def _attach_predictions(self, fixtures: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         tasks = [self._attach(f) for f in fixtures]
