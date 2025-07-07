@@ -41,19 +41,35 @@ class ApiSportsClient:
             logger.info("Returning cached fixtures for %s", date)
             return self.fixtures_cache[date]
 
+        all_fixtures = []
+        limit = 50
+        offset = 0
+        tz = TZ.zone if hasattr(TZ, 'zone') else str(TZ)
+
         # Ambil dari API jika belum ada
-        data = await self.fetch_json("fixtures", {
+        while True:
+        params = {
             "date": date,
             "status": "NS",
-            "timezone": str(TZ)
-        })
-        fixtures = data.get("response", [])
-        filtered = [f for f in fixtures if f["league"]["id"] in LIGA_FILTER]
-        logger.info("Fixtures fetched %d, after filter %d", len(fixtures), len(filtered))
+            "timezone": tz,
+            "limit": limit,
+            "offset": offset
+        }
+        data = await self.fetch_json("fixtures", params)
+        resp = data.get("response", [])
+        paging = data.get("paging", {})
+        all_fixtures.extend(resp)
+
+        total = paging.get("total", 0)
+        logger.debug("Offset %d: fetched %d/%d", offset, len(all_fixtures), total)
+        if len(all_fixtures) >= total or not resp:
+            break
+        offset += limit
+
+        filtered = [f for f in all_fixtures if f["league"]["id"] in LIGA_FILTER]
 
         result = await self._attach_predictions(filtered)
-        self.fixtures_cache[date] = result  # Simpan ke cache
-
+        self.fixtures_cache[date] = result
         return result
 
     async def _attach_predictions(self, fixtures: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
