@@ -34,20 +34,19 @@ class ApiSportsClient:
                 return await resp.json()
 
     async def get_fixtures(self, date: str) -> List[Dict[str, Any]]:
-        from main import LIGA_FILTER, TZ
+    from main import LIGA_FILTER, TZ
 
-        # Cek apakah sudah ada di cache
-        if date in self.fixtures_cache:
-            logger.info("Returning cached fixtures for %s", date)
-            return self.fixtures_cache[date]
+    # Cek cache
+    if date in self.fixtures_cache:
+        logger.info("Returning cached fixtures for %s", date)
+        return self.fixtures_cache[date]
 
-        all_fixtures = []
-        limit = 50
-        offset = 0
-        tz = TZ.zone if hasattr(TZ, 'zone') else str(TZ)
+    all_fixtures = []
+    limit = 50
+    offset = 0
+    tz = TZ.zone if hasattr(TZ, 'zone') else str(TZ)
 
-        # Ambil dari API jika belum ada
-        while True:
+    while True:
         params = {
             "date": date,
             "status": "NS",
@@ -62,15 +61,21 @@ class ApiSportsClient:
 
         total = paging.get("total", 0)
         logger.debug("Offset %d: fetched %d/%d", offset, len(all_fixtures), total)
+
         if len(all_fixtures) >= total or not resp:
             break
         offset += limit
 
-        filtered = [f for f in all_fixtures if f["league"]["id"] in LIGA_FILTER]
+    logger.info("Total NS fixtures fetched: %d", len(all_fixtures))
 
-        result = await self._attach_predictions(filtered)
-        self.fixtures_cache[date] = result
-        return result
+    # Filter berdasarkan liga
+    filtered = [f for f in all_fixtures if f["league"]["id"] in LIGA_FILTER]
+    logger.info("Fixtures after filtering: %d", len(filtered))
+
+    # Tambahkan prediksi
+    result = await self._attach_predictions(filtered)
+    self.fixtures_cache[date] = result
+    return result
 
     async def _attach_predictions(self, fixtures: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         tasks = [self._attach(f) for f in fixtures]
