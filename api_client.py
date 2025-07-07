@@ -3,6 +3,7 @@ import aiohttp
 from typing import List, Dict, Any
 import logging
 from cachetools import TTLCache
+from main import LIGA_FILTER, TZ
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +35,6 @@ class ApiSportsClient:
                 return await resp.json()
 
     async def get_fixtures(self, date: str) -> List[Dict[str, Any]]:
-    from main import LIGA_FILTER, TZ
 
     # Cek cache
     if date in self.fixtures_cache:
