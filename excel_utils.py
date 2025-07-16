@@ -67,7 +67,7 @@ def create_workbook(fixtures):
 
     headers = [
         "Negara", "Liga", "Home", "Away", "Tanggal", "Jam", "Saran",
-        "Probabilitas (H/D/A)",
+        "History", None,
         "Performance", None,
         "Form", None,
         "ATT", None,
@@ -75,7 +75,7 @@ def create_workbook(fixtures):
         "Comp", None,
         "H2H", None
     ]
-    subheaders = [""] * 8 + ["Home", "Away"] * 6
+    subheaders = [""] * 7 + ["Home", "Away"] * 7
 
     ws.append(headers)
     ws.append(subheaders)
@@ -88,16 +88,17 @@ def create_workbook(fixtures):
             cell.alignment = Alignment(horizontal="center", vertical="center")
             cell.fill = header_fill
 
-    for col in range(1, 9):
+    for col in range(1, 8):
         ws.merge_cells(start_row=1, start_column=col, end_row=2, end_column=col)
 
     merge_groups = {
-        "Performance": (9, 10),
-        "Form": (11, 12),
-        "ATT": (13, 14),
-        "DEF": (15, 16),
-        "Comp": (17, 18),
-        "H2H": (19, 20)
+        "History": (8, 9),
+        "Performance": (10, 11),
+        "Form": (12, 13),
+        "ATT": (14, 15),
+        "DEF": (16, 17),
+        "Comp": (18, 19),
+        "H2H": (20, 21)
     }
     for _, (start_col, end_col) in merge_groups.items():
         ws.merge_cells(start_row=1, start_column=start_col, end_row=1, end_column=end_col)
@@ -155,13 +156,11 @@ def _extract_row(f):
     p = pred[0]
     pr = p.get('predictions', {})
     advice = pr.get('advice', '-')
-    pct = pr.get('percent', {})
-    hp = pct.get('home', '-')
-    dp = pct.get('draw', '-')
-    ap = pct.get('away', '-')
-    prob_summary = f"{hp} / {dp} / {ap}"
     t = p.get('teams', {})
     home, away = t.get('home', {}), t.get('away', {})
+    #Ambil History Match
+    h_history = home.get("league", {}).get("form", {})
+    a_histroy = away.get("league", {}).get("form", {})
     # Ambil statistik home dan away
     home_stats = home.get("league", {}).get("fixtures", {})
     away_stats = away.get("league", {}).get("fixtures", {})
@@ -205,7 +204,7 @@ def _extract_row(f):
         date,
         time,
         advice,
-        prob_summary,
+        h_history, a_history,
         home_sum, away_sum,
         form, form_away,
         att, att_away,
