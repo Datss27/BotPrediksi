@@ -56,6 +56,8 @@ class ApiSportsClient:
         return dt.strftime('%Y-%m-%d')
 
     async def get_fixtures(self, target_date: date) -> List[Dict[str, Any]]:
+        if not isinstance(target_date, date):
+            raise TypeError(f"Expected datetime.date, got {type(target_date)}")
         """
         Fetch fixtures for a given date (timezone-aware) with caching.
 
