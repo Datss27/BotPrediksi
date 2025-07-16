@@ -160,7 +160,7 @@ def _extract_row(f):
     home, away = t.get('home', {}), t.get('away', {})
     #Ambil History Match
     h_history = home.get("league", {}).get("form", {})
-    a_histroy = away.get("league", {}).get("form", {})
+    a_history = away.get("league", {}).get("form", {})
     # Ambil statistik home dan away
     home_stats = home.get("league", {}).get("fixtures", {})
     away_stats = away.get("league", {}).get("fixtures", {})
