@@ -23,7 +23,7 @@ async def prediksi_command(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("Hari Ini", callback_data="today")],
         [InlineKeyboardButton("Besok", callback_data="tomorrow")],
-        [InlineKeyboardButton("Semua (Hari Ini & Besok)", callback_data="both")],
+        [InlineKeyboardButton("Semua", callback_data="both")],
     ])
     await update.message.reply_text("Pilih tanggal prediksi Boskuuu:", reply_markup=kb)
 
