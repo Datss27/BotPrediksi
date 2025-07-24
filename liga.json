@@ -35,6 +35,5 @@
   { "id": 250, "nama": "Division Profesional - Apertura", "negara": "Paraguay", "kode": "PAR" },
   { "id": 281, "nama": "Primera División (Peru)", "negara": "Peru", "kode": "PER" },
   { "id": 369, "nama": "Super League", "negara": "Uzbekistan", "kode": "UBK" },
-  { "id": 388, "nama": "1. Division", "negara": "Kazakhstan", "kode": "KZN" },
   { "id": 299, "nama": "Primera División", "negara": "Venezuela", "kode": "VNZ" }
 ]
