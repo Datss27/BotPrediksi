@@ -23,6 +23,7 @@ async def prediksi_command(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("Hari Ini", callback_data="today")],
         [InlineKeyboardButton("Besok", callback_data="tomorrow")],
+        [InlineKeyboardButton("Semua (Hari Ini & Besok)", callback_data="both")],
     ])
     await update.message.reply_text("Pilih tanggal prediksi Boskuuu:", reply_markup=kb)
 
@@ -31,25 +32,34 @@ async def prediksi_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await update.callback_query.answer()
 
     today = datetime.now(TZ).date()
+    fixtures = []
+    total = 0
 
-    if choice in ("today", "tomorrow"):
-        target_date = today + timedelta(days=1 if choice == "tomorrow" else 0)
-        await update.callback_query.edit_message_text(f"Eksekusi prediksi {target_date} Boskuuu")
-
-        try:
-            fixtures = await api_client.get_fixtures(target_date)
-        except Exception as e:
-            await update.callback_query.edit_message_text(f"❌ Gagal ambil prediksi: {e}")
-            return
-
-    # Buat file Excel dan kirim
     try:
+        if choice == "today":
+            target_date = today
+            await update.callback_query.edit_message_text(f"Eksekusi prediksi {target_date} Boskuuu")
+            fixtures = await limited_get_fixture(target_date)
+        
+        elif choice == "tomorrow":
+            target_date = today + timedelta(days=1)
+            await update.callback_query.edit_message_text(f"Eksekusi prediksi {target_date} Boskuuu")
+            fixtures = await limited_get_fixture(target_date)
+        
+        elif choice == "both":
+            await update.callback_query.edit_message_text("Eksekusi prediksi Hari Ini & Besok Boskuuu")
+            fixtures_today = await limited_get_fixture(today)
+            fixtures_tomorrow = await limited_get_fixture(today + timedelta(days=1))
+            fixtures = fixtures_today + fixtures_tomorrow
+
+        # Buat dan kirim file Excel
         file_path, total = create_workbook(fixtures)
         caption = f"Total prediksi: {total} pertandingan"
         await ctx.bot.send_document(chat_id=update.effective_chat.id, document=file_path, filename="prediksi.xlsx", caption=caption)
+
     except Exception as e:
-        await ctx.bot.send_message(chat_id=update.effective_chat.id, text=f"❌ Gagal membuat atau mengirim file: {e}")
+        await ctx.bot.send_message(chat_id=update.effective_chat.id, text=f"❌ Gagal memproses prediksi: {e}")
 
 def register_handlers(app: Application):
     app.add_handler(CommandHandler("prediksi", prediksi_command))
-    app.add_handler(CallbackQueryHandler(prediksi_callback, pattern="^(today|tomorrow)$"))
+    app.add_handler(CallbackQueryHandler(prediksi_callback, pattern="^(today|tomorrow|both)$"))
