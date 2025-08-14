@@ -11,7 +11,11 @@
   { "id": 203, "nama": "Süper Lig", "negara": "Turkey", "kode": "TRK" },
   { "id": 103, "nama": "Eliteserien", "negara": "Norway", "kode": "NOR" },
   { "id": 128, "nama": "Liga Profesional", "negara": "Argentina", "kode": "ARG" },
-  { "id": 253, "nama": "Major League Soccer", "negara": "USA", "kode": "USA" }
+  { "id": 253, "nama": "Major League Soccer", "negara": "USA", "kode": "USA" },
+  { "id": 292, "nama": "K League 1", "negara": "South-Korea", "kode": "SHK" },
+  { "id": 239, "nama": "Primera A", "negara": "Colombia", "kode": "COL" },
+  { "id": 169, "nama": "Super league", "negara": "China", "kode": "CNA" }
 ]
+
 
 
