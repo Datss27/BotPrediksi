@@ -1,0 +1,14 @@
+{
+  "build": {
+    "builder": "NIXPACKS"
+  },
+  "deploy": {
+    "startCommand": "python bot.py"
+  },
+  "crons": [
+    {
+      "command": "python bot.py --auto",
+      "schedule": "0 1 * * *"
+    }
+  ]
+}
