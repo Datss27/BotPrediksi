@@ -8,7 +8,7 @@
   "crons": [
     {
       "command": "python bot.py --auto",
-      "schedule": "0 1 * * *"
+      "schedule": "30 16 * * *"
     }
   ]
 }
