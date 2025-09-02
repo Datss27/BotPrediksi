@@ -20,7 +20,7 @@ headers = {
 }
 
 TIMEZONE = "Asia/Makassar"
-ALLOWED_LEAGUES = [39, 135, 140]  # EPL, Serie A, La Liga
+ALLOWED_LEAGUES = [39, 135, 140, 703]  # EPL, Serie A, La Liga
 # ==================================================
 
 # ===================== API FUNCTIONS =====================
