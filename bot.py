@@ -239,11 +239,5 @@ def main():
         # jalankan hanya sekali
         asyncio.run(send_file())
 
-    else:
-        # mode normal (polling)
-        app.add_handler(CommandHandler("start", start))
-        app.add_handler(CommandHandler("prediksi", prediksi))
-        app.run_polling()
-
 if __name__ == "__main__":
     main()
