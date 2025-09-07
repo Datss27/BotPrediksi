@@ -1,4 +1,3 @@
-httpx
+Flask
 requests
 openpyxl
-python-telegram-bot==20.3
